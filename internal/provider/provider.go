@@ -144,6 +144,7 @@ func (p *spacemanProvider) Resources(context.Context) []func() resource.Resource
 		newXSpaceSettingsResource,
 		newXSpacePeerResource,
 		newHumanPolicyResource,
+		newHumanTypePermissionResource,
 		newUserResource,
 		newUserGrantsResource,
 		newUserIdentityResource,

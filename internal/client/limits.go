@@ -74,7 +74,13 @@ type QueuePolicy struct {
 	IncidentInsertion  string `json:"incident_insertion"`
 	IncidentPreempts   bool   `json:"incident_preempts"`
 	EscalationReorders bool   `json:"escalation_reorders"`
-	Version            int64  `json:"version"`
+	// IncidentTriggers are the sources trusted to raise incidents; an empty list trusts nobody (always sent).
+	IncidentTriggers  []string `json:"incident_triggers"`
+	IncidentUntrusted string   `json:"incident_untrusted,omitempty"`
+	IncidentWorkers   string   `json:"incident_workers,omitempty"`
+	IncidentCapacity  int64    `json:"incident_capacity"`
+	IncidentResume    string   `json:"incident_resume,omitempty"`
+	Version           int64    `json:"version"`
 }
 
 // GetQueuePolicy reads the policy from GET /spaces/{id}/tasks (the API has no separate read; the tasks are ignored).
@@ -90,6 +96,9 @@ func (c *Client) GetQueuePolicy(ctx context.Context, spaceID string) (*QueuePoli
 
 // SetQueuePolicy is PUT /spaces/{id}/queue/policy.
 func (c *Client) SetQueuePolicy(ctx context.Context, spaceID string, in QueuePolicy) (*QueuePolicy, error) {
+	if in.IncidentTriggers == nil {
+		in.IncidentTriggers = []string{"control", "operator"} // SpaceMan's default; null would be refused
+	}
 	var out QueuePolicy
 	return &out, c.put(ctx, "/spaces/"+esc(spaceID)+"/queue/policy", 0, in, &out)
 }

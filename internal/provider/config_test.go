@@ -108,18 +108,30 @@ func TestLimitAttributes(t *testing.T) {
 }
 
 func TestQueueInputAndChange(t *testing.T) {
-	cur := &client.QueuePolicy{MaxActive: 1, IncidentInsertion: "top", IncidentPreempts: true}
-	m := queuePolicyModel{MaxActive: i64(3), IncidentInsertion: types.StringUnknown(), IncidentPreempts: types.BoolUnknown(), EscalationReorders: types.BoolValue(true)}
-	in := queueInput(&m, cur)
-	if in.MaxActive != 3 || in.IncidentInsertion != "top" || !in.IncidentPreempts || !in.EscalationReorders {
+	ctx := context.Background()
+	cur := &client.QueuePolicy{MaxActive: 1, IncidentInsertion: "top", IncidentPreempts: true, IncidentTriggers: []string{"control", "operator"},
+		IncidentUntrusted: "propose", IncidentWorkers: "finish", IncidentResume: "manual"}
+	m := queuePolicyModel{MaxActive: i64(3), IncidentInsertion: types.StringUnknown(), IncidentPreempts: types.BoolUnknown(), EscalationReorders: types.BoolValue(true),
+		IncidentTriggers: setValue([]string{"template:pd"}), IncidentWorkers: types.StringValue("pause"), IncidentCapacity: i64(2),
+		IncidentResume: types.StringUnknown()}
+	in := queueInput(ctx, &m, cur)
+	if in.MaxActive != 3 || in.IncidentInsertion != "top" || !in.IncidentPreempts || !in.EscalationReorders || len(in.IncidentTriggers) != 1 ||
+		in.IncidentWorkers != "pause" || in.IncidentCapacity != 2 || in.IncidentResume != "manual" || in.IncidentUntrusted != "propose" {
 		t.Fatalf("input = %+v", in)
 	}
-	prior := queuePolicyModel{MaxActive: i64(1), IncidentInsertion: types.StringValue("top"), IncidentPreempts: types.BoolValue(true), EscalationReorders: types.BoolValue(false)}
-	if queueChanged(&prior, cur) {
+	prior := queuePolicyModel{MaxActive: i64(1), IncidentInsertion: types.StringValue("top"), IncidentPreempts: types.BoolValue(true), EscalationReorders: types.BoolValue(false),
+		IncidentTriggers: setValue([]string{"operator", "control"}), IncidentUntrusted: types.StringValue("propose"), IncidentWorkers: types.StringValue("finish"),
+		IncidentCapacity: i64(0), IncidentResume: types.StringValue("manual")}
+	if queueChanged(ctx, &prior, cur) {
 		t.Fatal("unchanged policy reported as changed")
 	}
+	cur.IncidentTriggers = []string{"operator"}
+	if !queueChanged(ctx, &prior, cur) {
+		t.Fatal("a trigger change after the plan must be detected")
+	}
+	cur.IncidentTriggers = []string{"control", "operator"}
 	cur.MaxActive = 2
-	if !queueChanged(&prior, cur) {
+	if !queueChanged(ctx, &prior, cur) {
 		t.Fatal("a change after the plan must be detected")
 	}
 }
@@ -184,6 +196,15 @@ func TestImportIDs(t *testing.T) {
 	}
 	if _, ok := importState(t, newUserIdentityResource(), "usr_1/oidc_1"); ok {
 		t.Fatal("identity import needs three parts")
+	}
+	st, ok = importState(t, newHumanTypePermissionResource(), "spc_1/hty_1")
+	if !ok || attr(st, "space_id") != "spc_1" || attr(st, "action_type") != "hty_1" || attr(st, "id") != "spc_1/hty_1" {
+		t.Fatal("type permission import")
+	}
+	for _, bad := range []string{"spc_1", "spc_1/", "/approval", "spc_1/a/b"} {
+		if _, ok := importState(t, newHumanTypePermissionResource(), bad); ok {
+			t.Errorf("type permission import %q must be refused", bad)
+		}
 	}
 	st, ok = importState(t, newXSpacePeerResource(), "spc_a/spc_b")
 	if !ok || attr(st, "space_id") != "spc_a" || attr(st, "peer_id") != "spc_b" {

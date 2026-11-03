@@ -31,7 +31,11 @@ type User struct {
 	ProvisionedVia string  `json:"provisioned_via"`
 	Grants         []Grant `json:"grants"`
 	SSOGrants      []Grant `json:"sso_grants"`
-	Version        int64   `json:"version"`
+	// MFARequired is the effective requirement (the administrator's setting or what policy forces); MFARequiredSet is
+	// the administrator's setting alone.
+	MFARequired    bool  `json:"mfa_required"`
+	MFARequiredSet bool  `json:"mfa_required_set"`
+	Version        int64 `json:"version"`
 }
 
 // ManualGrants are the grants administrators set (the set PUT /users/{id}/grants replaces).
@@ -51,6 +55,21 @@ type CreateUserInput struct {
 	Email       string       `json:"email,omitempty"`
 	DisplayName string       `json:"display_name"`
 	Grants      []GrantInput `json:"grants"`
+	MFARequired bool         `json:"mfa_required,omitempty"`
+}
+
+// UserProfileInput is PUT /users/{id}/profile: it replaces the email (empty removes it), the display name and the
+// administrator's MFA setting.
+type UserProfileInput struct {
+	Email       string `json:"email"`
+	DisplayName string `json:"display_name"`
+	MFARequired bool   `json:"mfa_required"`
+}
+
+// UpdateUserProfile is PUT /users/{id}/profile (If-Match required).
+func (c *Client) UpdateUserProfile(ctx context.Context, id string, version int64, in UserProfileInput) (*User, error) {
+	var out User
+	return &out, c.put(ctx, "/users/"+esc(id)+"/profile", version, in, &out)
 }
 
 // ListUsers is GET /users.

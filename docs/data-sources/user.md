@@ -36,6 +36,8 @@ resource "spaceman_user_grants" "grace" {
 - `display_name` (String) Display name.
 - `enabled` (Boolean) Whether the user may sign in.
 - `grants` (Attributes List) Every grant: manual ones and those from OIDC group mappings. (see [below for nested schema](#nestedatt--grants))
+- `mfa_enforced` (Boolean) Whether the user must use a second factor now (the administrator's setting, or forced by policy).
+- `mfa_required` (Boolean) Whether an administrator requires a second factor for the user.
 - `provisioned_via` (String) `admin`, `bootstrap` or `jit`.
 
 <a id="nestedatt--grants"></a>

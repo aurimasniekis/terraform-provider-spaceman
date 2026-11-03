@@ -149,3 +149,70 @@ func TestManualGrantsSkipSSO(t *testing.T) {
 		t.Fatalf("manual = %v", g)
 	}
 }
+
+// Type permissions (SM-HUI-008): a create sends no If-Match, an update does; the version comes from the body or the
+// ETag; delete treats 404 as done.
+func TestHumanTypePermissions(t *testing.T) {
+	f := &fakeAPI{resp: []func(http.ResponseWriter){
+		jsonResp(200, map[string]any{"action_type": "approval", "view_role": "viewer", "stored": false, "version": 0}),
+		func(w http.ResponseWriter) {
+			w.Header().Set("ETag", `"1"`)
+			jsonResp(200, map[string]any{"action_type": "approval", "view_role": "admin", "stored": true})(w)
+		},
+		jsonResp(200, map[string]any{"action_type": "approval", "view_role": "operator", "stored": true, "version": 2}),
+		problem(404, "not_found", "gone"),
+	}}
+	c := newTest(t, f)
+	ctx := context.Background()
+	if p, err := c.GetHumanTypePermission(ctx, "spc_1", "approval"); err != nil || p.Stored {
+		t.Fatalf("get = %+v, %v", p, err)
+	}
+	p, err := c.SetHumanTypePermission(ctx, "spc_1", "approval", 0, HumanTypePermissionInput{ViewRole: "admin"})
+	if err != nil || p.Version != 1 {
+		t.Fatalf("create = %+v, %v", p, err)
+	}
+	if _, err := c.SetHumanTypePermission(ctx, "spc_1", "approval", 1, HumanTypePermissionInput{ViewRole: "operator"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.DeleteHumanTypePermission(ctx, "spc_1", "hty_1"); err != nil {
+		t.Fatal(err)
+	}
+	if r := f.reqs[1]; r.method != http.MethodPut || r.ifMatch != "" || r.path != "/api/v1/spaces/spc_1/human-type-permissions/approval" ||
+		strings.Contains(r.body, "agent_roles") {
+		t.Fatalf("create = %+v", r)
+	}
+	if r := f.reqs[2]; r.ifMatch != `"1"` {
+		t.Fatalf("update = %+v", r)
+	}
+	if r := f.reqs[3]; r.method != http.MethodDelete || r.path != "/api/v1/spaces/spc_1/human-type-permissions/hty_1" {
+		t.Fatalf("delete = %+v", r)
+	}
+}
+
+// A profile update replaces all three fields with If-Match; a removed email is sent as "" (ADR-0050). The queue
+// policy always sends its trigger list (an empty one trusts nobody; nil sends SpaceMan's default).
+func TestUserProfileAndQueueTriggers(t *testing.T) {
+	f := &fakeAPI{resp: []func(http.ResponseWriter){
+		jsonResp(200, map[string]any{"id": "usr_1", "version": 3, "mfa_required": true, "mfa_required_set": false}),
+		jsonResp(200, map[string]any{"version": 1}), jsonResp(200, map[string]any{"version": 2}),
+	}}
+	c := newTest(t, f)
+	ctx := context.Background()
+	u, err := c.UpdateUserProfile(ctx, "usr_1", 2, UserProfileInput{DisplayName: "A"})
+	if err != nil || !u.MFARequired || u.MFARequiredSet {
+		t.Fatalf("profile = %+v, %v", u, err)
+	}
+	if r := f.reqs[0]; r.method != http.MethodPut || r.path != "/api/v1/users/usr_1/profile" || r.ifMatch != `"2"` ||
+		r.body != `{"email":"","display_name":"A","mfa_required":false}` {
+		t.Fatalf("profile request = %+v", r)
+	}
+	if _, err := c.SetQueuePolicy(ctx, "spc_1", QueuePolicy{MaxActive: 1, IncidentTriggers: []string{}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.SetQueuePolicy(ctx, "spc_1", QueuePolicy{MaxActive: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(f.reqs[1].body, `"incident_triggers":[]`) || !strings.Contains(f.reqs[2].body, `"incident_triggers":["control","operator"]`) {
+		t.Fatalf("queue policy bodies %s / %s", f.reqs[1].body, f.reqs[2].body)
+	}
+}

@@ -89,6 +89,8 @@ type userDSModel struct {
 	Email          types.String `tfsdk:"email"`
 	DisplayName    types.String `tfsdk:"display_name"`
 	Enabled        types.Bool   `tfsdk:"enabled"`
+	MFARequired    types.Bool   `tfsdk:"mfa_required"`
+	MFAEnforced    types.Bool   `tfsdk:"mfa_enforced"`
 	ProvisionedVia types.String `tfsdk:"provisioned_via"`
 	Grants         types.List   `tfsdk:"grants"`
 }
@@ -107,10 +109,13 @@ func (d *userDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, r
 		MarkdownDescription: "A user, by ID or email (`GET /users`), for example one created by OIDC just-in-time provisioning whose grants " +
 			"`spaceman_user_grants` manages, or an escalation assignee of `spaceman_human_action_policy`. Nothing secret is read.",
 		Attributes: map[string]schema.Attribute{
-			"id":              schema.StringAttribute{Optional: true, Computed: true, MarkdownDescription: "The user ID (`usr_…`). Give `id` or `email`."},
-			"email":           schema.StringAttribute{Optional: true, Computed: true, MarkdownDescription: "The user's email (case-insensitive). Give `id` or `email`."},
-			"display_name":    c("Display name."),
-			"enabled":         schema.BoolAttribute{Computed: true, MarkdownDescription: "Whether the user may sign in."},
+			"id":           schema.StringAttribute{Optional: true, Computed: true, MarkdownDescription: "The user ID (`usr_…`). Give `id` or `email`."},
+			"email":        schema.StringAttribute{Optional: true, Computed: true, MarkdownDescription: "The user's email (case-insensitive). Give `id` or `email`."},
+			"display_name": c("Display name."),
+			"enabled":      schema.BoolAttribute{Computed: true, MarkdownDescription: "Whether the user may sign in."},
+			"mfa_required": schema.BoolAttribute{Computed: true, MarkdownDescription: "Whether an administrator requires a second factor for the user."},
+			"mfa_enforced": schema.BoolAttribute{Computed: true, MarkdownDescription: "Whether the user must use a second factor now (the " +
+				"administrator's setting, or forced by policy)."},
 			"provisioned_via": c("`admin`, `bootstrap` or `jit`."),
 			"grants": schema.ListNestedAttribute{Computed: true, MarkdownDescription: "Every grant: manual ones and those from OIDC group mappings.",
 				NestedObject: schema.NestedAttributeObject{Attributes: map[string]schema.Attribute{
@@ -164,6 +169,7 @@ func (d *userDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 			"role": types.StringValue(g.Role), "domain": types.StringValue(g.Domain), "source": types.StringValue(src)}))
 	}
 	m = userDSModel{ID: types.StringValue(u.ID), Email: types.StringValue(u.Email), DisplayName: types.StringValue(u.DisplayName),
-		Enabled: types.BoolValue(u.Enabled), ProvisionedVia: types.StringValue(u.ProvisionedVia), Grants: types.ListValueMust(userGrantObjType, grants)}
+		Enabled: types.BoolValue(u.Enabled), MFARequired: types.BoolValue(u.MFARequiredSet), MFAEnforced: types.BoolValue(u.MFARequired),
+		ProvisionedVia: types.StringValue(u.ProvisionedVia), Grants: types.ListValueMust(userGrantObjType, grants)}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &m)...)
 }

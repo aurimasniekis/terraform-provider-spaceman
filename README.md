@@ -3,7 +3,8 @@
 The Terraform provider for [SpaceMan](https://github.com/aurimasniekis/go-spaceman): it manages a central's durable
 configuration through the administrative API (`/api/v1`). Go module `github.com/aurimasniekis/terraform-provider-spaceman`,
 built on the HashiCorp [terraform-plugin-framework](https://developer.hashicorp.com/terraform/plugin/framework). Design
-decisions are SpaceMan's ADR-0035 (phase 1), ADR-0041 (phase 2) and ADR-0047 (this separate repository), in SpaceMan's
+decisions are SpaceMan's ADR-0035 (phase 1), ADR-0041 (phase 2), ADR-0047 (this separate repository) and ADR-0050 (type
+permissions, user profiles, the incident policy), in SpaceMan's
 `docs/DECISIONS.md`. Until the move into this repository the provider was developed in SpaceMan's
 `terraform-provider-spaceman/` directory; its history came along.
 
@@ -16,6 +17,7 @@ Status: **phases 1 and 2** of work package M5-01. Not published to a registry.
 | `spaceman_space` | `/spaces` (archive on destroy, purge opt-in; a `node_id` change relocates through `/spaces/{id}/relocation`) |
 | `spaceman_space_role` | `/spaces/{id}/roles/{name}` |
 | `spaceman_space_accounts` | `/spaces/{id}/accounts` (the whole binding set) |
+| `spaceman_space_repository` | `/spaces/{id}/repositories/{name}` (a configured repository; path changes replace it) |
 | `spaceman_account` | `/accounts` (write-only `secret_wo`) |
 | `spaceman_harness_profile` | `/harness-profiles` |
 | `spaceman_role_template` | `/role-templates` |
@@ -34,12 +36,13 @@ Status: **phases 1 and 2** of work package M5-01. Not published to a registry.
 | `spaceman_oidc_provider` | `/oidc/providers` (write-only `client_secret_wo`) |
 | `spaceman_oidc_group_mapping` | `/oidc/providers/{id}/mappings` |
 | `spaceman_space_limits` | `/spaces/{id}/limits` (only the configured overrides; removing one clears it; destroy clears the owned ones) |
-| `spaceman_space_queue_policy` | `PUT /spaces/{id}/queue/policy` (the top-level task limit; kept on destroy) |
+| `spaceman_space_queue_policy` | `PUT /spaces/{id}/queue/policy` (the top-level task limit and the incident policy; kept on destroy) |
 | `spaceman_schedule` | `/spaces/{id}/schedules` |
 | `spaceman_space_xspace_settings` | `/spaces/{id}/xspace/settings` (reset to defaults on destroy) |
 | `spaceman_xspace_peer` | `/spaces/{id}/xspace/peers/{peer_id}` (one side of a grant, owned whole) |
 | `spaceman_human_action_policy` | `/human-policies/{type}`, `/spaces/{id}/human-policies/{type}` |
-| `spaceman_user` | `/users` (disabled on destroy; email and name fixed) |
+| `spaceman_human_action_type_permission` | `/spaces/{id}/human-type-permissions/{type}` (who may see, create and respond to a type; deleted on destroy) |
+| `spaceman_user` | `/users`, `PUT /users/{id}/profile` (email, display name and `mfa_required` in place; disabled on destroy) |
 | `spaceman_user_grants` | `PUT /users/{id}/grants` (the whole manual grant set) |
 | `spaceman_user_identity` | `/users/{id}/identities` (expected OIDC identity) |
 
@@ -50,8 +53,7 @@ Never managed: runtime state (runs, tasks, inbox items, messages, schedule occur
 human-action requests and responses, approvals, recordings), nodes (enrolled with a one-time token), API tokens, password
 reset tokens and SSO link invitations (shown once), passwords and MFA enrollment.
 
-Not available: space repositories (no API yet); the backup target and schedule (configuration file only); changing a
-user's email, display name or `mfa_required` (no API); type permissions beyond space enablement (no API).
+Not available: the backup target and schedule (configuration file only).
 
 ## Behaviour in brief
 
@@ -68,8 +70,8 @@ user's email, display name or `mfa_required` (no API); type permissions beyond s
 - **Immutable versions.** Prompts, skills, event templates and human-action types publish one new version per content
   change and never re-publish an unchanged configuration.
 - **No silent replacement.** Fields the API cannot change in place on objects it cannot delete (slugs, kinds, a prompt's
-  name, a user's email and display name) are refused at plan time. Creating a cross-space peer configuration or a
-  human-action policy that already exists fails instead of overwriting it (import it).
+  name) are refused at plan time. Creating a cross-space peer configuration, a human-action policy or a human-action
+  type permission that already exists fails instead of overwriting it (import it).
 - **Relocation.** A change of a space's `node_id` is an in-place update that runs SpaceMan's safe relocation and waits for
   it (`relocation_dirty_state`, `relocation_stop_runs`, `relocation_recovery`, `relocation_retain_days`,
   `relocation_timeout`). Unpushed or uncommitted state is refused by default; the space stays paused on the new node.

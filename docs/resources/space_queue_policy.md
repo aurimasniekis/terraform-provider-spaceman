@@ -17,6 +17,14 @@ resource "spaceman_space_queue_policy" "payments" {
   max_top_level_tasks = 2
   incident_insertion  = "top"
   incident_preempts   = true
+
+  # Who may raise incidents: operators, and events rendered by the PagerDuty template. Control's own incident
+  # requests (and anything else) become proposals an operator confirms.
+  incident_triggers  = ["operator", "template:pagerduty-incident"]
+  incident_untrusted = "propose"
+  # Pause the preempted task's workers and resume them when the incident ends.
+  incident_workers = "pause"
+  incident_resume  = "auto"
 }
 ```
 
@@ -30,8 +38,13 @@ resource "spaceman_space_queue_policy" "payments" {
 ### Optional
 
 - `escalation_reorders` (Boolean) Escalation may move a task to the top; otherwise it only raises priority (default `false`).
+- `incident_capacity` (Number) Extra top-level slots only incident tasks may use (0-20, default 0).
 - `incident_insertion` (String) Where new incident tasks go: `top` (default) or `priority`.
 - `incident_preempts` (Boolean) A new incident returns running ordinary top-level tasks to ready (default `false`).
+- `incident_resume` (String) When the incident ends: `manual` (control or an operator resumes preempted tasks, default) or `auto` (eligible preempted tasks with live workers run again).
+- `incident_triggers` (Set of String) Sources trusted to raise incidents (SM-QUEUE-009, ADR-0050): `operator`, `control`, `subscription:<id>` and `template:<id or slug>`. Default `operator` and `control`; an empty set trusts nobody. Incidents from any other source follow `incident_untrusted`.
+- `incident_untrusted` (String) An incident from an untrusted source: `propose` (an ordinary task an operator may confirm, default) or `refuse`.
+- `incident_workers` (String) What happens to a preempted task's worker runs: `finish` (default; they are told to wrap up), `pause` (their turn is interrupted; they idle until resumed) or `interrupt` (stopped; the session stays resumable).
 - `max_top_level_tasks` (Number) Top-level tasks that may run at once (1-20; default: the installation's `limits.max_top_level_tasks`).
 
 ### Read-Only

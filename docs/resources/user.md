@@ -2,12 +2,12 @@
 page_title: "spaceman_user Resource - spaceman"
 subcategory: ""
 description: |-
-  A SpaceMan user (`POST /users`, `POST /users/{id}/enable|disable`).
+  A SpaceMan user (`POST /users`, `PUT /users/{id}/profile`, `POST /users/{id}/enable|disable`).
 ---
 
 # spaceman_user (Resource)
 
-A SpaceMan user (`POST /users`, `POST /users/{id}/enable|disable`). Grants are `spaceman_user_grants`, linked sign-in identities `spaceman_user_identity`. Terraform never sets passwords, issues reset tokens or link invitations, or enrolls MFA: those are one-time secrets or the user's own steps. SpaceMan has no API to change a user's email or display name or to delete a user: changes of those fields are refused at plan time, and destroying the resource disables the user (sessions end, API tokens stop working) and removes it from Terraform's state. The last enabled global administrator cannot be disabled.
+A SpaceMan user (`POST /users`, `PUT /users/{id}/profile`, `POST /users/{id}/enable|disable`). Grants are `spaceman_user_grants`, linked sign-in identities `spaceman_user_identity`. Email, display name and `mfa_required` are updated in place (ADR-0050). Changing the email of a user who signs in with a password ends their sessions (it is their sign-in name), and such a user cannot lose their email; an email is never an SSO key, so a change never links or unlinks an identity. Clearing `mfa_required` never lifts MFA that policy forces (`require_totp`, operator or admin grants on a password account): `mfa_enforced` shows the requirement in force. Terraform never sets passwords, issues reset tokens or link invitations, or enrolls MFA: those are one-time secrets or the user's own steps. SpaceMan has no API to delete a user: destroying the resource disables the user (sessions end, API tokens stop working) and removes it from Terraform's state. The last enabled global administrator cannot be disabled.
 
 ## Example Usage
 
@@ -15,6 +15,8 @@ A SpaceMan user (`POST /users`, `POST /users/{id}/enable|disable`). Grants are `
 resource "spaceman_user" "ada" {
   email        = "ada@example.com"
   display_name = "Ada Lovelace"
+  # Require a second factor even without operator or admin grants (policy may force it anyway: see mfa_enforced).
+  mfa_required = true
 }
 ```
 
@@ -23,16 +25,18 @@ resource "spaceman_user" "ada" {
 
 ### Required
 
-- `display_name` (String) Display name (at most 128 bytes). Fixed after creation.
+- `display_name` (String) Display name (at most 128 bytes).
 
 ### Optional
 
-- `email` (String) Email address, in lower case (unique). Fixed after creation.
+- `email` (String) Email address, in lower case (unique). Removing it is refused for a user with a password.
 - `enabled` (Boolean) Whether the user may sign in and use API tokens (default `true`).
+- `mfa_required` (Boolean) Whether an administrator requires a second factor for this user (default `false`).
 
 ### Read-Only
 
 - `id` (String) The user ID (`usr_…`).
+- `mfa_enforced` (Boolean) Whether the user must use a second factor now: `mfa_required`, or forced by policy (`require_totp`, operator or admin grants on a password account).
 - `provisioned_via` (String) How the user was created: `admin`, `bootstrap` or `jit`.
 
 ## Import

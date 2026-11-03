@@ -100,6 +100,8 @@ func TestAccLimits(t *testing.T) {
 	l1 := "  max_concurrent_runs = 4\n  support_depth = 2\n  on_lower = \"stop\""
 	l2 := "  max_concurrent_runs = 6\n  budget_warn_percent = 50\n  retention_attachments_days = 30\n  on_lower = \"stop\""
 	q1 := "  max_top_level_tasks = 3"
+	q2 := q1 + "\n  incident_triggers  = [\"operator\", \"template:pagerduty\"]\n  incident_untrusted = \"refuse\"\n  incident_workers   = \"pause\"" +
+		"\n  incident_capacity  = 1\n  incident_resume    = \"auto\""
 	accSteps(t,
 		resource.TestStep{
 			Config: limitsHCL(slug, acc.nodeA.ID, l1, q1, true),
@@ -109,6 +111,11 @@ func TestAccLimits(t *testing.T) {
 				resource.TestCheckNoResourceAttr("spaceman_space_limits.l", "max_kb_sessions"),
 				resource.TestCheckResourceAttr("spaceman_space_queue_policy.q", "max_top_level_tasks", "3"),
 				resource.TestCheckResourceAttr("spaceman_space_queue_policy.q", "incident_insertion", "top"),
+				resource.TestCheckResourceAttr("spaceman_space_queue_policy.q", "incident_triggers.#", "2"),
+				resource.TestCheckResourceAttr("spaceman_space_queue_policy.q", "incident_untrusted", "propose"),
+				resource.TestCheckResourceAttr("spaceman_space_queue_policy.q", "incident_workers", "finish"),
+				resource.TestCheckResourceAttr("spaceman_space_queue_policy.q", "incident_capacity", "0"),
+				resource.TestCheckResourceAttr("spaceman_space_queue_policy.q", "incident_resume", "manual"),
 				resource.TestCheckResourceAttr("data.spaceman_space_limits.e", "values.max_concurrent_runs", "4"),
 				resource.TestCheckResourceAttr("data.spaceman_space_limits.e", "values.max_top_level_tasks", "3"),
 				resource.TestCheckResourceAttr("data.spaceman_space_limits.e", "overrides.support_depth", "2"),
@@ -176,6 +183,55 @@ func TestAccLimits(t *testing.T) {
 			Check: resource.ComposeAggregateTestCheckFunc(
 				resource.TestCheckResourceAttr("spaceman_space_queue_policy.q", "max_top_level_tasks", "3"),
 				resource.TestCheckResourceAttr("spaceman_space_queue_policy.q", "incident_preempts", "true"),
+			),
+		},
+		// The incident policy (SM-QUEUE-009, ADR-0050): set in place, stable, importable, and a configured field edited
+		// elsewhere is drift.
+		resource.TestStep{
+			Config: limitsHCL(slug, acc.nodeA.ID, l2, q2, true),
+			ConfigPlanChecks: resource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
+				plancheck.ExpectResourceAction("spaceman_space_queue_policy.q", plancheck.ResourceActionUpdate)}},
+			Check: resource.ComposeAggregateTestCheckFunc(
+				resource.TestCheckResourceAttr("spaceman_space_queue_policy.q", "incident_triggers.#", "2"),
+				resource.TestCheckTypeSetElemAttr("spaceman_space_queue_policy.q", "incident_triggers.*", "template:pagerduty"),
+				resource.TestCheckResourceAttr("spaceman_space_queue_policy.q", "incident_untrusted", "refuse"),
+				resource.TestCheckResourceAttr("spaceman_space_queue_policy.q", "incident_workers", "pause"),
+				resource.TestCheckResourceAttr("spaceman_space_queue_policy.q", "incident_capacity", "1"),
+				resource.TestCheckResourceAttr("spaceman_space_queue_policy.q", "incident_resume", "auto"),
+				func(*terraform.State) error {
+					p, err := acc.client.GetQueuePolicy(context.Background(), spaceIDBySlug(t, slug))
+					if err != nil {
+						return err
+					}
+					if strings.Join(p.IncidentTriggers, ",") != "operator,template:pagerduty" || p.IncidentWorkers != "pause" || p.IncidentCapacity != 1 {
+						return fmt.Errorf("stored policy %+v", p)
+					}
+					return nil
+				},
+			),
+		},
+		resource.TestStep{Config: limitsHCL(slug, acc.nodeA.ID, l2, q2, true), PlanOnly: true},
+		resource.TestStep{ResourceName: "spaceman_space_queue_policy.q", ImportState: true, ImportStateVerify: true},
+		resource.TestStep{
+			PreConfig: func() {
+				id := spaceIDBySlug(t, slug)
+				p, err := acc.client.GetQueuePolicy(context.Background(), id)
+				if err != nil {
+					t.Fatal(err)
+				}
+				p.IncidentWorkers = "finish"
+				if _, err := acc.client.SetQueuePolicy(context.Background(), id, *p); err != nil {
+					t.Fatal(err)
+				}
+			},
+			Config: limitsHCL(slug, acc.nodeA.ID, l2, q2, true), PlanOnly: true, ExpectNonEmptyPlan: true,
+		},
+		// An empty trigger set trusts nobody.
+		resource.TestStep{
+			Config: limitsHCL(slug, acc.nodeA.ID, l2, "  max_top_level_tasks = 3\n  incident_triggers = []\n  incident_workers = \"pause\"", true),
+			Check: resource.ComposeAggregateTestCheckFunc(
+				resource.TestCheckResourceAttr("spaceman_space_queue_policy.q", "incident_triggers.#", "0"),
+				resource.TestCheckResourceAttr("spaceman_space_queue_policy.q", "incident_workers", "pause"),
 			),
 		},
 		// Destroying the limits resource clears the overrides it owns; the foreign one stays.
@@ -663,7 +719,7 @@ resource "spaceman_user_identity" "u" {
 }
 
 data "spaceman_user" "u" {
-  email      = "tf-user-%[1]s@example.com"
+  email      = spaceman_user.u.email
   depends_on = [spaceman_user_grants.u]
 }
 `, sfx, slug, nodeID, display, grants, enabled)
@@ -748,17 +804,85 @@ func TestAccUsers(t *testing.T) {
 				return nil
 			},
 		},
-		// SpaceMan cannot rename a user or change the email: refused at plan time.
+		// The display name, the email and the MFA requirement change in place (PUT /users/{id}/profile, ADR-0050).
 		resource.TestStep{
-			Config:      usersHCL(sfx, slug, acc.nodeA.ID, "TF user renamed", g2, "  enabled = false"),
-			PlanOnly:    true,
-			ExpectError: regexp.MustCompile(`A user's display name cannot be changed`),
+			Config: usersHCL(sfx, slug, acc.nodeA.ID, "TF user renamed", g2, "  enabled = false\n  mfa_required = true"),
+			ConfigPlanChecks: resource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
+				plancheck.ExpectResourceAction("spaceman_user.u", plancheck.ResourceActionUpdate)}},
+			Check: resource.ComposeAggregateTestCheckFunc(
+				resource.TestCheckResourceAttr("spaceman_user.u", "display_name", "TF user renamed"),
+				resource.TestCheckResourceAttr("spaceman_user.u", "mfa_required", "true"),
+				resource.TestCheckResourceAttr("spaceman_user.u", "mfa_enforced", "true"),
+				resource.TestCheckResourceAttr("spaceman_user.u", "enabled", "false"),
+				resource.TestCheckResourceAttr("data.spaceman_user.u", "mfa_required", "true"),
+			),
+		},
+		resource.TestStep{
+			Config: renamedEmail(usersHCL(sfx, slug, acc.nodeA.ID, "TF user renamed", g2, "  enabled = false")),
+			ConfigPlanChecks: resource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
+				plancheck.ExpectResourceAction("spaceman_user.u", plancheck.ResourceActionUpdate)}},
+			Check: resource.ComposeAggregateTestCheckFunc(
+				resource.TestCheckResourceAttr("spaceman_user.u", "email", "tf-renamed-"+sfx+"@example.com"),
+				// mfa_required is no longer configured: it is not Terraform's any more and keeps its value (ADR-0035).
+				resource.TestCheckResourceAttr("spaceman_user.u", "mfa_required", "true"),
+				resource.TestCheckResourceAttr("spaceman_user.u", "mfa_enforced", "true"),
+				resource.TestCheckResourceAttrPair("data.spaceman_user.u", "id", "spaceman_user.u", "id"),
+				func(*terraform.State) error {
+					u, err := acc.client.GetUser(ctx, userID)
+					if err != nil {
+						return err
+					}
+					if u.Email != "tf-renamed-"+sfx+"@example.com" || u.DisplayName != "TF user renamed" || !u.MFARequiredSet {
+						return fmt.Errorf("profile in SpaceMan %+v", u)
+					}
+					return nil
+				},
+			),
+		},
+		resource.TestStep{Config: renamedEmail(usersHCL(sfx, slug, acc.nodeA.ID, "TF user renamed", g2, "  enabled = false")), PlanOnly: true},
+		resource.TestStep{ResourceName: "spaceman_user.u", ImportState: true, ImportStateVerify: true},
+		// A profile edited in the UI is drift; applying restores it.
+		resource.TestStep{
+			PreConfig: func() {
+				u, err := acc.client.GetUser(ctx, userID)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, err := acc.client.UpdateUserProfile(ctx, userID, u.Version, client.UserProfileInput{Email: u.Email, DisplayName: "Edited in the UI",
+					MFARequired: true}); err != nil {
+					t.Fatal(err)
+				}
+			},
+			Config: renamedEmail(usersHCL(sfx, slug, acc.nodeA.ID, "TF user renamed", g2, "  enabled = false")), PlanOnly: true, ExpectNonEmptyPlan: true,
+		},
+		resource.TestStep{
+			Config: renamedEmail(usersHCL(sfx, slug, acc.nodeA.ID, "TF user renamed", g2, "  enabled = false\n  mfa_required = false")),
+			Check: func(*terraform.State) error {
+				u, err := acc.client.GetUser(ctx, userID)
+				if err != nil {
+					return err
+				}
+				if u.DisplayName != "TF user renamed" || u.MFARequiredSet || u.MFARequired {
+					return fmt.Errorf("after correcting drift %+v", u)
+				}
+				return nil
+			},
 		},
 		resource.TestStep{
 			Config:      strings.Replace(usersHCL(sfx, slug, acc.nodeA.ID, "TF user", g2, ""), `email        = "tf-user-`, `email        = "TF-User-`, 1),
 			PlanOnly:    true,
 			ExpectError: regexp.MustCompile(`must be an email address in lower case`),
 		},
-		resource.TestStep{Config: usersHCL(sfx, slug, acc.nodeA.ID, "TF user", g2, "  enabled = false"), PlanOnly: true},
+		// Another user's address is refused by SpaceMan.
+		resource.TestStep{
+			Config:      strings.Replace(usersHCL(sfx, slug, acc.nodeA.ID, "TF user renamed", g2, "  enabled = false"), `email        = "tf-user-`, `email        = "tf-off-`, 1),
+			ExpectError: regexp.MustCompile(`already exists`),
+		},
+		resource.TestStep{Config: renamedEmail(usersHCL(sfx, slug, acc.nodeA.ID, "TF user renamed", g2, "  enabled = false")), PlanOnly: true},
 	)
+}
+
+// renamedEmail moves spaceman_user.u to the address tf-renamed-<sfx>@example.com.
+func renamedEmail(hcl string) string {
+	return strings.Replace(hcl, `email        = "tf-user-`, `email        = "tf-renamed-`, 1)
 }

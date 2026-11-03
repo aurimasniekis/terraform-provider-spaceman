@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"slices"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -10,6 +11,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/setplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -281,6 +284,11 @@ type queuePolicyModel struct {
 	IncidentInsertion  types.String `tfsdk:"incident_insertion"`
 	IncidentPreempts   types.Bool   `tfsdk:"incident_preempts"`
 	EscalationReorders types.Bool   `tfsdk:"escalation_reorders"`
+	IncidentTriggers   types.Set    `tfsdk:"incident_triggers"`
+	IncidentUntrusted  types.String `tfsdk:"incident_untrusted"`
+	IncidentWorkers    types.String `tfsdk:"incident_workers"`
+	IncidentCapacity   types.Int64  `tfsdk:"incident_capacity"`
+	IncidentResume     types.String `tfsdk:"incident_resume"`
 }
 
 func (r *queuePolicyResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -301,6 +309,19 @@ func (r *queuePolicyResource) Schema(_ context.Context, _ resource.SchemaRequest
 				stringvalidator.OneOf("top", "priority")),
 			"incident_preempts":   optBool("A new incident returns running ordinary top-level tasks to ready (default `false`)."),
 			"escalation_reorders": optBool("Escalation may move a task to the top; otherwise it only raises priority (default `false`)."),
+			"incident_triggers": schema.SetAttribute{Optional: true, Computed: true, ElementType: types.StringType,
+				MarkdownDescription: "Sources trusted to raise incidents (SM-QUEUE-009, ADR-0050): `operator`, `control`, `subscription:<id>` and " +
+					"`template:<id or slug>`. Default `operator` and `control`; an empty set trusts nobody. Incidents from any other source follow " +
+					"`incident_untrusted`.",
+				PlanModifiers: []planmodifier.Set{setplanmodifier.UseStateForUnknown()}},
+			"incident_untrusted": optString("An incident from an untrusted source: `propose` (an ordinary task an operator may confirm, default) or `refuse`.",
+				stringvalidator.OneOf("propose", "refuse")),
+			"incident_workers": optString("What happens to a preempted task's worker runs: `finish` (default; they are told to wrap up), `pause` "+
+				"(their turn is interrupted; they idle until resumed) or `interrupt` (stopped; the session stays resumable).",
+				stringvalidator.OneOf("finish", "pause", "interrupt")),
+			"incident_capacity": optInt64("Extra top-level slots only incident tasks may use (0-20, default 0)."),
+			"incident_resume": optString("When the incident ends: `manual` (control or an operator resumes preempted tasks, default) or `auto` "+
+				"(eligible preempted tasks with live workers run again).", stringvalidator.OneOf("manual", "auto")),
 		},
 	}
 }
@@ -311,10 +332,15 @@ func (r *queuePolicyResource) toModel(p *client.QueuePolicy, m *queuePolicyModel
 	m.IncidentInsertion = types.StringValue(p.IncidentInsertion)
 	m.IncidentPreempts = types.BoolValue(p.IncidentPreempts)
 	m.EscalationReorders = types.BoolValue(p.EscalationReorders)
+	m.IncidentTriggers = setValue(p.IncidentTriggers)
+	m.IncidentUntrusted = types.StringValue(p.IncidentUntrusted)
+	m.IncidentWorkers = types.StringValue(p.IncidentWorkers)
+	m.IncidentCapacity = types.Int64Value(p.IncidentCapacity)
+	m.IncidentResume = types.StringValue(p.IncidentResume)
 }
 
 // input is the planned policy, with fields the plan does not know taken from the current one.
-func queueInput(m *queuePolicyModel, cur *client.QueuePolicy) client.QueuePolicy {
+func queueInput(ctx context.Context, m *queuePolicyModel, cur *client.QueuePolicy) client.QueuePolicy {
 	in := *cur
 	if !m.MaxActive.IsUnknown() && !m.MaxActive.IsNull() {
 		in.MaxActive = m.MaxActive.ValueInt64()
@@ -327,6 +353,21 @@ func queueInput(m *queuePolicyModel, cur *client.QueuePolicy) client.QueuePolicy
 	}
 	if !m.EscalationReorders.IsUnknown() && !m.EscalationReorders.IsNull() {
 		in.EscalationReorders = m.EscalationReorders.ValueBool()
+	}
+	if !m.IncidentTriggers.IsUnknown() && !m.IncidentTriggers.IsNull() {
+		var d diagnostics
+		in.IncidentTriggers = stringSet(ctx, m.IncidentTriggers, &d)
+	}
+	str := func(v types.String, dst *string) {
+		if !v.IsUnknown() && !v.IsNull() {
+			*dst = v.ValueString()
+		}
+	}
+	str(m.IncidentUntrusted, &in.IncidentUntrusted)
+	str(m.IncidentWorkers, &in.IncidentWorkers)
+	str(m.IncidentResume, &in.IncidentResume)
+	if !m.IncidentCapacity.IsUnknown() && !m.IncidentCapacity.IsNull() {
+		in.IncidentCapacity = m.IncidentCapacity.ValueInt64()
 	}
 	return in
 }
@@ -342,7 +383,7 @@ func (r *queuePolicyResource) Create(ctx context.Context, req resource.CreateReq
 		addAPIError(&resp.Diagnostics, "Could not read the queue policy", err)
 		return
 	}
-	p, err := r.c.SetQueuePolicy(ctx, m.SpaceID.ValueString(), queueInput(&m, cur))
+	p, err := r.c.SetQueuePolicy(ctx, m.SpaceID.ValueString(), queueInput(ctx, &m, cur))
 	if err != nil {
 		addAPIError(&resp.Diagnostics, "Could not set the queue policy", err)
 		return
@@ -370,9 +411,19 @@ func (r *queuePolicyResource) Read(ctx context.Context, req resource.ReadRequest
 }
 
 // queueChanged reports whether the stored policy differs from what Terraform read at refresh.
-func queueChanged(prior *queuePolicyModel, cur *client.QueuePolicy) bool {
+func queueChanged(ctx context.Context, prior *queuePolicyModel, cur *client.QueuePolicy) bool {
+	var d diagnostics
+	triggers := stringSet(ctx, prior.IncidentTriggers, &d)
+	slices.Sort(triggers)
+	have := slices.Clone(cur.IncidentTriggers)
+	slices.Sort(have)
 	return prior.MaxActive.ValueInt64() != cur.MaxActive || prior.IncidentInsertion.ValueString() != cur.IncidentInsertion ||
-		prior.IncidentPreempts.ValueBool() != cur.IncidentPreempts || prior.EscalationReorders.ValueBool() != cur.EscalationReorders
+		prior.IncidentPreempts.ValueBool() != cur.IncidentPreempts || prior.EscalationReorders.ValueBool() != cur.EscalationReorders ||
+		(!prior.IncidentTriggers.IsNull() && !slices.Equal(triggers, have)) ||
+		(!prior.IncidentUntrusted.IsNull() && prior.IncidentUntrusted.ValueString() != cur.IncidentUntrusted) ||
+		(!prior.IncidentWorkers.IsNull() && prior.IncidentWorkers.ValueString() != cur.IncidentWorkers) ||
+		(!prior.IncidentCapacity.IsNull() && prior.IncidentCapacity.ValueInt64() != cur.IncidentCapacity) ||
+		(!prior.IncidentResume.IsNull() && prior.IncidentResume.ValueString() != cur.IncidentResume)
 }
 
 func (r *queuePolicyResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
@@ -387,13 +438,13 @@ func (r *queuePolicyResource) Update(ctx context.Context, req resource.UpdateReq
 		addAPIError(&resp.Diagnostics, "Could not read the queue policy", err)
 		return
 	}
-	if queueChanged(&prior, cur) {
+	if queueChanged(ctx, &prior, cur) {
 		resp.Diagnostics.AddError("The queue policy changed after the plan",
 			"The space's queue policy in SpaceMan differs from what Terraform read when it planned (for example it was edited in the web UI). "+
 				"Run `terraform plan` again to see the current state.")
 		return
 	}
-	p, err := r.c.SetQueuePolicy(ctx, prior.SpaceID.ValueString(), queueInput(&m, cur))
+	p, err := r.c.SetQueuePolicy(ctx, prior.SpaceID.ValueString(), queueInput(ctx, &m, cur))
 	if err != nil {
 		addAPIError(&resp.Diagnostics, "Could not set the queue policy", err)
 		return

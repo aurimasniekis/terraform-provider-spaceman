@@ -11,7 +11,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
@@ -29,6 +28,8 @@ type userModel struct {
 	Email          types.String `tfsdk:"email"`
 	DisplayName    types.String `tfsdk:"display_name"`
 	Enabled        types.Bool   `tfsdk:"enabled"`
+	MFARequired    types.Bool   `tfsdk:"mfa_required"`
+	MFAEnforced    types.Bool   `tfsdk:"mfa_enforced"`
 	ProvisionedVia types.String `tfsdk:"provisioned_via"`
 }
 
@@ -38,18 +39,23 @@ func (r *userResource) Metadata(_ context.Context, req resource.MetadataRequest,
 
 func (r *userResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "A SpaceMan user (`POST /users`, `POST /users/{id}/enable|disable`). Grants are `spaceman_user_grants`, linked " +
-			"sign-in identities `spaceman_user_identity`. Terraform never sets passwords, issues reset tokens or link invitations, or enrolls " +
-			"MFA: those are one-time secrets or the user's own steps. SpaceMan has no API to change a user's email or display name or to " +
-			"delete a user: changes of those fields are refused at plan time, and destroying the resource disables the user (sessions end, " +
-			"API tokens stop working) and removes it from Terraform's state. The last enabled global administrator cannot be disabled.",
+		MarkdownDescription: "A SpaceMan user (`POST /users`, `PUT /users/{id}/profile`, `POST /users/{id}/enable|disable`). Grants are " +
+			"`spaceman_user_grants`, linked sign-in identities `spaceman_user_identity`. Email, display name and `mfa_required` are updated in " +
+			"place (ADR-0050). Changing the email of a user who signs in with a password ends their sessions (it is their sign-in name), and " +
+			"such a user cannot lose their email; an email is never an SSO key, so a change never links or unlinks an identity. Clearing " +
+			"`mfa_required` never lifts MFA that policy forces (`require_totp`, operator or admin grants on a password account): " +
+			"`mfa_enforced` shows the requirement in force. Terraform never sets passwords, issues reset tokens or link invitations, or " +
+			"enrolls MFA: those are one-time secrets or the user's own steps. SpaceMan has no API to delete a user: destroying the resource " +
+			"disables the user (sessions end, API tokens stop working) and removes it from Terraform's state. The last enabled global " +
+			"administrator cannot be disabled.",
 		Attributes: map[string]schema.Attribute{
 			"id": idAttr("The user ID (`usr_…`)."),
-			"email": schema.StringAttribute{Optional: true, MarkdownDescription: "Email address, in lower case (unique). Fixed after creation.",
-				Validators:    []validator.String{lowerCaseEmail{}},
-				PlanModifiers: []planmodifier.String{fixedAfterCreate("A user's email")}},
-			"display_name": schema.StringAttribute{Required: true, MarkdownDescription: "Display name (at most 128 bytes). Fixed after creation.",
-				PlanModifiers: []planmodifier.String{fixedAfterCreate("A user's display name")}},
+			"email": schema.StringAttribute{Optional: true, MarkdownDescription: "Email address, in lower case (unique). Removing it is refused " +
+				"for a user with a password.", Validators: []validator.String{lowerCaseEmail{}}},
+			"display_name": schema.StringAttribute{Required: true, MarkdownDescription: "Display name (at most 128 bytes)."},
+			"mfa_required": optBool("Whether an administrator requires a second factor for this user (default `false`)."),
+			"mfa_enforced": schema.BoolAttribute{Computed: true, MarkdownDescription: "Whether the user must use a second factor now: " +
+				"`mfa_required`, or forced by policy (`require_totp`, operator or admin grants on a password account)."},
 			"enabled":         optBool("Whether the user may sign in and use API tokens (default `true`)."),
 			"provisioned_via": computedString("How the user was created: `admin`, `bootstrap` or `jit`."),
 		},
@@ -65,6 +71,8 @@ func (r *userResource) toModel(u *client.User, m *userModel) {
 	}
 	m.DisplayName = keepTrimmed(m.DisplayName, u.DisplayName)
 	m.Enabled = types.BoolValue(u.Enabled)
+	m.MFARequired = types.BoolValue(u.MFARequiredSet)
+	m.MFAEnforced = types.BoolValue(u.MFARequired)
 	m.ProvisionedVia = types.StringValue(u.ProvisionedVia)
 }
 
@@ -74,7 +82,8 @@ func (r *userResource) Create(ctx context.Context, req resource.CreateRequest, r
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	u, err := r.c.CreateUser(ctx, client.CreateUserInput{Email: strOrEmpty(m.Email), DisplayName: m.DisplayName.ValueString()})
+	u, err := r.c.CreateUser(ctx, client.CreateUserInput{Email: strOrEmpty(m.Email), DisplayName: m.DisplayName.ValueString(),
+		MFARequired: !m.MFARequired.IsNull() && !m.MFARequired.IsUnknown() && m.MFARequired.ValueBool()})
 	if err != nil {
 		addAPIError(&resp.Diagnostics, "Could not create the user", err)
 		return
@@ -129,6 +138,18 @@ func (r *userResource) Update(ctx context.Context, req resource.UpdateRequest, r
 		addAPIError(&resp.Diagnostics, "Could not update the user", &client.APIError{Status: 409, Code: "conflict",
 			Detail: fmt.Sprintf("the user changed (version %d, Terraform read %d)", u.Version, v), Operation: "GET /users/{user_id}"})
 		return
+	}
+	mfa := u.MFARequiredSet
+	if !m.MFARequired.IsUnknown() && !m.MFARequired.IsNull() {
+		mfa = m.MFARequired.ValueBool()
+	}
+	if email, name := strOrEmpty(m.Email), m.DisplayName.ValueString(); email != u.Email || name != prior.DisplayName.ValueString() ||
+		mfa != u.MFARequiredSet {
+		if u, err = r.c.UpdateUserProfile(ctx, u.ID, u.Version, client.UserProfileInput{Email: email, DisplayName: name, MFARequired: mfa}); err != nil {
+			addAPIError(&resp.Diagnostics, "Could not update the user's profile", err)
+			return
+		}
+		setVersion(ctx, resp.Private, u.Version, &resp.Diagnostics)
 	}
 	if !m.Enabled.IsUnknown() && !m.Enabled.IsNull() && m.Enabled.ValueBool() != u.Enabled {
 		if u, err = r.c.SetUserEnabled(ctx, u.ID, u.Version, m.Enabled.ValueBool()); err != nil {
