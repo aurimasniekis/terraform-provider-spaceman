@@ -566,6 +566,7 @@ resource "spaceman_human_action_policy" "question" {
   escalate_priority      = "urgent"
   requester_ended        = "next_launch"
   hold_minutes           = 30
+  response_inbox         = "routed"
 }
 %s`, slug, nodeID, remind, extra)
 }
@@ -584,7 +585,9 @@ func TestAccHumanPolicies(t *testing.T) {
 				// Fields left out start from the policy in force (the built-in todo policy).
 				resource.TestCheckResourceAttr("spaceman_human_action_policy.todo_default", "max_reminders", "1"),
 				resource.TestCheckResourceAttr("spaceman_human_action_policy.todo_default", "rate_per_run_hour", "30"),
+				resource.TestCheckResourceAttr("spaceman_human_action_policy.todo_default", "response_inbox", "off"),
 				resource.TestCheckResourceAttr("spaceman_human_action_policy.question", "escalate_priority", "urgent"),
+				resource.TestCheckResourceAttr("spaceman_human_action_policy.question", "response_inbox", "routed"),
 				resource.TestCheckResourceAttr("spaceman_human_action_policy.question", "remind_after_minutes", "240"),
 				resource.TestCheckResourceAttr("spaceman_human_action_policy.question", "max_reminders", "3"),
 				func(s *terraform.State) error { spaceID = stateAttr(s, "spaceman_space.s", "id"); return nil },
@@ -622,7 +625,7 @@ func TestAccHumanPolicies(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				if p.EscalatePriority != "urgent" || p.RatePerRunHour != 12 {
+				if p.EscalatePriority != "urgent" || p.RatePerRunHour != 12 || p.ResponseInbox != "routed" {
 					return fmt.Errorf("policy after correcting drift: %+v", p.HumanPolicyFields)
 				}
 				return nil

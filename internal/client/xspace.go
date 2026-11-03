@@ -125,6 +125,7 @@ type HumanPolicyFields struct {
 	WakeIdle             bool   `json:"wake_idle"`
 	RatePerRunHour       int64  `json:"rate_per_run_hour"`
 	RatePerSpaceHour     int64  `json:"rate_per_space_hour"`
+	ResponseInbox        string `json:"response_inbox,omitempty"`
 }
 
 // HumanPolicies is a scope's stored policies and the policy in force for each type.

@@ -389,6 +389,7 @@ type subscriptionModel struct {
 	Enabled           types.Bool   `tfsdk:"enabled"`
 	Start             types.Object `tfsdk:"start"`
 	Delivery          types.String `tfsdk:"delivery"`
+	WhilePaused       types.String `tfsdk:"while_paused"`
 	TemplateID        types.String `tfsdk:"template_id"`
 	Subject           types.String `tfsdk:"subject"`
 	Durable           types.String `tfsdk:"durable"`
@@ -438,6 +439,11 @@ func (r *subscriptionResource) Schema(_ context.Context, _ resource.SchemaReques
 				MarkdownDescription: "`durable` (default): a JetStream durable consumer, acknowledged after the inbox commit, redelivered and replayable. " +
 					"`core`: a plain NATS Core subscription for sources that publish without JetStream. **Non-durable**: no replay, no redelivery, " +
 					"no cursor (leave `start` out), and messages published while SpaceMan is disconnected are lost. Changing it replaces the subscription."},
+			"while_paused": schema.StringAttribute{Optional: true, Computed: true, Default: stringDefault("defer"),
+				Validators: []validatorString{stringvalidator.OneOf("defer", "wake", "stop")},
+				MarkdownDescription: "While the space is paused: `defer` (default) keeps ingesting and tells control about new items when the " +
+					"space resumes; `wake` keeps ingesting and tells control at once; `stop` stops the subscription until the space resumes " +
+					"(durable events wait in the stream; core NATS messages published meanwhile are lost)."},
 			"template_id": computedString("The template of `template_version_id`."),
 			"subject":     schema.StringAttribute{Computed: true, MarkdownDescription: "The effective Pulse filter."},
 			"durable":     computedString("The durable name the Pulse operator must grant."),
@@ -476,6 +482,10 @@ func (r *subscriptionResource) toModel(s *client.Subscription, m *subscriptionMo
 	m.Delivery = types.StringValue(s.Delivery)
 	if s.Delivery == "" { // a central from before delivery modes
 		m.Delivery = types.StringValue("durable")
+	}
+	m.WhilePaused = types.StringValue(s.WhilePaused)
+	if s.WhilePaused == "" { // a central from before paused-space policies
+		m.WhilePaused = types.StringValue("defer")
 	}
 	m.Enabled = types.BoolValue(s.Enabled)
 	m.Subject = types.StringValue(s.Subject)
@@ -517,7 +527,7 @@ func (r *subscriptionResource) Create(ctx context.Context, req resource.CreateRe
 	}
 	in := client.CreateSubscriptionInput{Name: m.Name.ValueString(), ConnectionID: m.ConnectionID.ValueString(), TemplateVersionID: strOrEmpty(m.TemplateVersionID),
 		Follow: strOrEmpty(m.Follow), Vars: stringMap(ctx, m.Vars, &resp.Diagnostics), Start: r.cursor(ctx, m.Start, &resp.Diagnostics),
-		Delivery: strOrEmpty(m.Delivery)}
+		Delivery: strOrEmpty(m.Delivery), WhilePaused: strOrEmpty(m.WhilePaused)}
 	if c := strOrEmpty(m.Custom); c != "" {
 		def, err := parseDefinition(c)
 		if err != nil {
@@ -575,7 +585,7 @@ func (r *subscriptionResource) Update(ctx context.Context, req resource.UpdateRe
 		return
 	}
 	in := client.UpdateSubscriptionInput{Name: m.Name.ValueString(), Enabled: m.Enabled.ValueBool(), Follow: strOrEmpty(m.Follow),
-		Vars: stringMap(ctx, m.Vars, &resp.Diagnostics)}
+		Vars: stringMap(ctx, m.Vars, &resp.Diagnostics), WhilePaused: strOrEmpty(m.WhilePaused)}
 	if c := strOrEmpty(m.Custom); c != "" {
 		def, err := parseDefinition(c)
 		if err != nil {

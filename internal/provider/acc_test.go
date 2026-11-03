@@ -509,6 +509,7 @@ resource "spaceman_event_subscription" "sub" {
   template_version_id = spaceman_event_template.t.latest_version_id
   follow              = "latest"
   vars                = { env = "prod" }
+  while_paused        = "wake"
 }
 
 data "spaceman_event_template" "gh" {
@@ -531,6 +532,7 @@ func TestAccEvents(t *testing.T) {
 				resource.TestCheckResourceAttr("spaceman_event_template.t", "latest_version", "1"),
 				resource.TestCheckResourceAttr("spaceman_event_subscription.sub", "subject", "evt.deploy.prod.>"),
 				resource.TestCheckResourceAttrSet("spaceman_event_subscription.sub", "durable"),
+				resource.TestCheckResourceAttr("spaceman_event_subscription.sub", "while_paused", "wake"),
 				resource.TestCheckResourceAttr("data.spaceman_event_template.gh", "builtin", "true"),
 				resource.TestCheckResourceAttrSet("data.spaceman_event_template.gh", "latest_version_id"),
 				func(s *terraform.State) error {
@@ -557,6 +559,9 @@ func TestAccEvents(t *testing.T) {
 					}
 					if sub.Template == nil || sub.Template.VersionID != stateAttr(s, "spaceman_event_template.t", "latest_version_id") {
 						return fmt.Errorf("subscription did not follow the new version: %+v", sub.Template)
+					}
+					if sub.WhilePaused != "wake" {
+						return fmt.Errorf("subscription while_paused = %q, want wake", sub.WhilePaused)
 					}
 					return nil
 				}),

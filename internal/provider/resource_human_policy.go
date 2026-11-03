@@ -23,7 +23,7 @@ var humanPolicyTypes = []string{"all", "question", "approval", "todo", "message"
 // builtinAllPolicy is SpaceMan's built-in policy for a type without its own defaults (internal/human.Builtin): the
 // starting point of an `all` policy's fields that the configuration leaves out.
 var builtinAllPolicy = client.HumanPolicyFields{MaxReminders: 1, RequesterEnded: "reroute", HoldMinutes: 60, WakeIdle: true,
-	RatePerRunHour: 30, RatePerSpaceHour: 300}
+	RatePerRunHour: 30, RatePerSpaceHour: 300, ResponseInbox: "off"}
 
 type humanPolicyResource struct{ base }
 
@@ -45,6 +45,7 @@ type humanPolicyModel struct {
 	WakeIdle             types.Bool   `tfsdk:"wake_idle"`
 	RatePerRunHour       types.Int64  `tfsdk:"rate_per_run_hour"`
 	RatePerSpaceHour     types.Int64  `tfsdk:"rate_per_space_hour"`
+	ResponseInbox        types.String `tfsdk:"response_inbox"`
 }
 
 func (r *humanPolicyResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -83,6 +84,9 @@ func (r *humanPolicyResource) Schema(_ context.Context, _ resource.SchemaRequest
 			"wake_idle":           optBool("Wake an idle requester with a one-line terminal notice."),
 			"rate_per_run_hour":   optInt64("New actions of this type one agent run may ask per hour (1-1000)."),
 			"rate_per_space_hour": optInt64("New actions of this type agents of one space may ask per hour (1-10000)."),
+			"response_inbox": optString("Whether a response also becomes an inbox item of the space (source `human_response`; metadata only, "+
+				"the response stays on the action): `off`, `routed` (when it is routed to control or the operators because the requester's "+
+				"run ended) or `always`.", stringvalidator.OneOf("off", "routed", "always")),
 		},
 	}
 }
@@ -104,6 +108,10 @@ func (r *humanPolicyResource) toModel(p *client.HumanPolicy, m *humanPolicyModel
 	m.WakeIdle = types.BoolValue(f.WakeIdle)
 	m.RatePerRunHour = types.Int64Value(f.RatePerRunHour)
 	m.RatePerSpaceHour = types.Int64Value(f.RatePerSpaceHour)
+	if f.ResponseInbox == "" { // a central from before response_inbox
+		f.ResponseInbox = "off"
+	}
+	m.ResponseInbox = types.StringValue(f.ResponseInbox)
 }
 
 // fields is the planned policy: every field the plan knows, the others from base.
@@ -133,6 +141,7 @@ func (m *humanPolicyModel) fields(base client.HumanPolicyFields) client.HumanPol
 	}
 	i64(m.RatePerRunHour, &f.RatePerRunHour)
 	i64(m.RatePerSpaceHour, &f.RatePerSpaceHour)
+	str(m.ResponseInbox, &f.ResponseInbox)
 	return f
 }
 

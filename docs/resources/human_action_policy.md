@@ -22,7 +22,8 @@ resource "spaceman_human_action_policy" "approvals" {
   escalate_priority      = "urgent"
 }
 
-# A space override for questions: keep the answer for the asking agent's next run.
+# A space override for questions: keep the answer for the asking agent's next run, and put answers that had to be
+# rerouted in the space's inbox.
 resource "spaceman_human_action_policy" "payments_questions" {
   space_id          = spaceman_space.payments.id
   action_type       = "question"
@@ -30,6 +31,7 @@ resource "spaceman_human_action_policy" "payments_questions" {
   hold_minutes      = 120
   successor_role    = "implementor"
   rate_per_run_hour = 10
+  response_inbox    = "routed"
 }
 ```
 
@@ -52,6 +54,7 @@ resource "spaceman_human_action_policy" "payments_questions" {
 - `remind_after_minutes` (Number) Remind people this long after the action was asked (0-43200; 0: no reminders).
 - `remind_every_minutes` (Number) Repeat the reminder this often (0-43200; 0: once).
 - `requester_ended` (String) When the requester's run has ended: `reroute` at once, or `next_launch` (keep it for the next run of the same agent instance).
+- `response_inbox` (String) Whether a response also becomes an inbox item of the space (source `human_response`; metadata only, the response stays on the action): `off`, `routed` (when it is routed to control or the operators because the requester's run ended) or `always`.
 - `space_id` (String) The space (not archived); empty (default) is the installation default.
 - `successor_role` (String) Reroute to a live run of this role before control; `""`: control.
 - `wake_idle` (Boolean) Wake an idle requester with a one-line terminal notice.

@@ -536,6 +536,7 @@ type Subscription struct {
 	Template     *TemplateRef        `json:"template,omitempty"`
 	Follow       string              `json:"follow"`
 	Delivery     string              `json:"delivery"`
+	WhilePaused  string              `json:"while_paused"`
 	Custom       *TemplateDefinition `json:"custom,omitempty"`
 	Vars         map[string]string   `json:"vars"`
 	Subject      string              `json:"subject"`
@@ -557,6 +558,7 @@ type CreateSubscriptionInput struct {
 	Vars              map[string]string   `json:"vars,omitempty"`
 	Start             *Cursor             `json:"start,omitempty"`
 	Delivery          string              `json:"delivery,omitempty"`
+	WhilePaused       string              `json:"while_paused,omitempty"`
 }
 
 // UpdateSubscriptionInput is PUT /spaces/{id}/subscriptions/{sub}.
@@ -568,6 +570,7 @@ type UpdateSubscriptionInput struct {
 	Custom            *TemplateDefinition `json:"custom,omitempty"`
 	Vars              map[string]string   `json:"vars,omitempty"`
 	Start             *Cursor             `json:"start,omitempty"`
+	WhilePaused       string              `json:"while_paused,omitempty"`
 }
 
 // HumanType is a human-action type with its versions.

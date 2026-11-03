@@ -8,7 +8,8 @@ resource "spaceman_human_action_policy" "approvals" {
   escalate_priority      = "urgent"
 }
 
-# A space override for questions: keep the answer for the asking agent's next run.
+# A space override for questions: keep the answer for the asking agent's next run, and put answers that had to be
+# rerouted in the space's inbox.
 resource "spaceman_human_action_policy" "payments_questions" {
   space_id          = spaceman_space.payments.id
   action_type       = "question"
@@ -16,4 +17,5 @@ resource "spaceman_human_action_policy" "payments_questions" {
   hold_minutes      = 120
   successor_role    = "implementor"
   rate_per_run_hour = 10
+  response_inbox    = "routed"
 }

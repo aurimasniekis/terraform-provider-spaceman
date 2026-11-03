@@ -138,7 +138,7 @@ func TestQueueInputAndChange(t *testing.T) {
 
 func TestHumanPolicyFieldsAndBase(t *testing.T) {
 	l := &client.HumanPolicies{Effective: []*client.HumanPolicy{
-		{ActionType: "question", HumanPolicyFields: client.HumanPolicyFields{RemindAfterMinutes: 240, MaxReminders: 3, RequesterEnded: "reroute"}}}}
+		{ActionType: "question", HumanPolicyFields: client.HumanPolicyFields{RemindAfterMinutes: 240, MaxReminders: 3, RequesterEnded: "reroute", ResponseInbox: "off"}}}}
 	if b := policyBase(l, "question", nil); b.RemindAfterMinutes != 240 || b.MaxReminders != 3 {
 		t.Fatalf("question base = %+v", b)
 	}
@@ -152,10 +152,18 @@ func TestHumanPolicyFieldsAndBase(t *testing.T) {
 	m := humanPolicyModel{RemindAfterMinutes: i64(10), RemindEveryMinutes: types.Int64Unknown(), MaxReminders: types.Int64Null(),
 		EscalateAfterMinutes: types.Int64Unknown(), EscalatePriority: types.StringValue("urgent"), EscalateAssignee: types.StringUnknown(),
 		RequesterEnded: types.StringUnknown(), HoldMinutes: types.Int64Unknown(), SuccessorRole: types.StringUnknown(), WakeIdle: types.BoolValue(false),
-		RatePerRunHour: types.Int64Unknown(), RatePerSpaceHour: types.Int64Unknown()}
+		RatePerRunHour: types.Int64Unknown(), RatePerSpaceHour: types.Int64Unknown(), ResponseInbox: types.StringUnknown()}
 	f := m.fields(policyBase(l, "question", nil))
 	if f.RemindAfterMinutes != 10 || f.MaxReminders != 3 || f.EscalatePriority != "urgent" || f.WakeIdle || f.RequesterEnded != "reroute" {
 		t.Fatalf("fields = %+v", f)
+	}
+	// response_inbox left out keeps the base, and a configured one is sent (the server reads an omitted one as off).
+	if f.ResponseInbox != "off" {
+		t.Fatalf("response_inbox from the built-in base = %q", f.ResponseInbox)
+	}
+	m.ResponseInbox = types.StringValue("always")
+	if f := m.fields(builtinAllPolicy); f.ResponseInbox != "always" {
+		t.Fatalf("configured response_inbox = %q", f.ResponseInbox)
 	}
 }
 

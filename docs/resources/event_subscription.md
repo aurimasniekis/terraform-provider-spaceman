@@ -44,6 +44,7 @@ resource "spaceman_event_subscription" "issues" {
 - `start` (Attributes) Where the consumer starts: applied on create, and on an update whenever this value changes (recreating the consumer; required when the subject changes). Anything but `new` replays history. Left out: `new` (no history). (see [below for nested schema](#nestedatt--start))
 - `template_version_id` (String) A published template version. With `follow = "latest"` this is the starting version; SpaceMan moves it forward.
 - `vars` (Map of String) Variable values. Only the configured variables are compared: defaults SpaceMan fills in are not drift.
+- `while_paused` (String) While the space is paused: `defer` (default) keeps ingesting and tells control about new items when the space resumes; `wake` keeps ingesting and tells control at once; `stop` stops the subscription until the space resumes (durable events wait in the stream; core NATS messages published meanwhile are lost).
 
 ### Read-Only
 
