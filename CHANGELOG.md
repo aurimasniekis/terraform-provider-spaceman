@@ -24,6 +24,8 @@ All notable changes to this provider are documented here. The format is based on
   the user data source exposes both.
 - `spaceman_space_queue_policy`: the incident policy (`incident_triggers`, `incident_untrusted`, `incident_workers`,
   `incident_capacity`, `incident_resume`; SpaceMan SM-QUEUE-009).
+- `spaceman_account`: the kind `codex_chatgpt_login` (a Codex ChatGPT login: `secret_wo` is the `auth.json` that
+  `codex login` wrote; SpaceMan SM-ACCT-002, ADR-0053). `TestAccCodexChatGPTAccount`.
 - `spaceman_event_subscription`: `while_paused` (`defer`, the default, `wake` or `stop`), what the subscription does while
   its space is paused (SpaceMan SM-EVT-014, ADR-0049).
 - `spaceman_human_action_policy`: `response_inbox` (`off`, `routed` or `always`), whether a response also becomes an

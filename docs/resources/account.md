@@ -34,9 +34,9 @@ resource "spaceman_account" "claude" {
 
 ### Required
 
-- `kind` (String) `claude_oauth_token`, `anthropic_api_key` or `openai_api_key`. Changing it replaces the account (its bindings go with it).
+- `kind` (String) `claude_oauth_token`, `anthropic_api_key`, `openai_api_key` or `codex_chatgpt_login` (a Codex ChatGPT login). Changing it replaces the account (its bindings go with it).
 - `name` (String) Unique name (at most 63 characters).
-- `secret_wo` (String, Sensitive, [Write-only](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments)) The credential (write-only). Sent on create and whenever `secret_wo_version` changes.
+- `secret_wo` (String, Sensitive, [Write-only](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments)) The credential (write-only). Sent on create and whenever `secret_wo_version` changes. For `codex_chatgpt_login` it is the `auth.json` that `codex login` wrote, e.g. `file("~/.codex/auth.json")`. Codex refreshes that login on the node and its refresh token works once: bump the version only with a fresh login, since re-sending an old file replaces the node's refreshed copy and breaks it (SpaceMan ADR-0053).
 
 ### Optional
 

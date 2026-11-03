@@ -874,3 +874,34 @@ data "spaceman_spaces" "all" {
 		),
 	})
 }
+
+// TestAccCodexChatGPTAccount covers the codex_chatgpt_login kind (SpaceMan SM-ACCT-002, ADR-0053): a ChatGPT-mode
+// auth.json is accepted for Codex, and anything else is refused by SpaceMan.
+func TestAccCodexChatGPTAccount(t *testing.T) {
+	testAccPreCheck(t)
+	name := "tf-codex-" + suffix()
+	hcl := func(login string) string {
+		return fmt.Sprintf(`
+resource "spaceman_account" "c" {
+  name              = %q
+  kind              = "codex_chatgpt_login"
+  secret_wo         = %s
+  secret_wo_version = 1
+}
+`, name, login)
+	}
+	accSteps(t,
+		resource.TestStep{
+			Config:      hcl(`jsonencode({ auth_mode = "apikey", OPENAI_API_KEY = "sk-test" })`),
+			ExpectError: regexp.MustCompile(`auth.json of a ChatGPT login`),
+		},
+		resource.TestStep{
+			Config: hcl(`jsonencode({ auth_mode = "chatgpt", tokens = { access_token = "a-test", refresh_token = "r-test" } })`),
+			Check: resource.ComposeAggregateTestCheckFunc(
+				resource.TestCheckResourceAttr("spaceman_account.c", "harness", "codex"),
+				resource.TestCheckResourceAttr("spaceman_account.c", "secret_version", "1"),
+				resource.TestCheckNoResourceAttr("spaceman_account.c", "secret_wo"),
+			),
+		},
+	)
+}

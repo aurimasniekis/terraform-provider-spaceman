@@ -64,14 +64,17 @@ func (r *accountResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 		Attributes: map[string]schema.Attribute{
 			"id":   idAttr("The account ID."),
 			"name": schema.StringAttribute{Required: true, MarkdownDescription: "Unique name (at most 63 characters)."},
-			"kind": schema.StringAttribute{Required: true, MarkdownDescription: "`claude_oauth_token`, `anthropic_api_key` or `openai_api_key`. Changing it replaces the account (its bindings go with it).",
-				Validators:    []validatorString{stringvalidator.OneOf("claude_oauth_token", "anthropic_api_key", "openai_api_key")},
+			"kind": schema.StringAttribute{Required: true, MarkdownDescription: "`claude_oauth_token`, `anthropic_api_key`, `openai_api_key` or `codex_chatgpt_login` (a Codex ChatGPT login). Changing it replaces the account (its bindings go with it).",
+				Validators:    []validatorString{stringvalidator.OneOf("claude_oauth_token", "anthropic_api_key", "openai_api_key", "codex_chatgpt_login")},
 				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()}},
 			"description": optString("Description."),
 			"metadata":    optMap("Free-form labels."),
 			"enabled":     optBool("Whether runs may use the account (default `true`)."),
 			"secret_wo": schema.StringAttribute{Required: true, WriteOnly: true, Sensitive: true,
-				MarkdownDescription: "The credential (write-only). Sent on create and whenever `secret_wo_version` changes."},
+				MarkdownDescription: "The credential (write-only). Sent on create and whenever `secret_wo_version` changes. For " +
+					"`codex_chatgpt_login` it is the `auth.json` that `codex login` wrote, e.g. `file(\"~/.codex/auth.json\")`. Codex refreshes " +
+					"that login on the node and its refresh token works once: bump the version only with a fresh login, since re-sending an " +
+					"old file replaces the node's refreshed copy and breaks it (SpaceMan ADR-0053)."},
 			"secret_wo_version": woVersion("secret_wo"),
 			"harness":           computedString("The harness the kind is for (`claude-code` or `codex`)."),
 			"secret_version":    schema.Int64Attribute{Computed: true, MarkdownDescription: "SpaceMan's count of stored secrets (increments on every rotation)."},
