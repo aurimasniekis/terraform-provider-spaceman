@@ -15,7 +15,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-go/tftypes"
 
-	"github.com/aurimasniekis/go-spaceman/terraform-provider-spaceman/internal/client"
+	"github.com/aurimasniekis/terraform-provider-spaceman/internal/client"
 )
 
 // Every schema is valid for the framework (write-only rules, defaults on computed attributes, nested types).

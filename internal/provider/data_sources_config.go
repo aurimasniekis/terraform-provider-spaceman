@@ -12,7 +12,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/aurimasniekis/go-spaceman/terraform-provider-spaceman/internal/client"
+	"github.com/aurimasniekis/terraform-provider-spaceman/internal/client"
 )
 
 // ---- effective limits of a space ----

@@ -15,7 +15,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/aurimasniekis/go-spaceman/terraform-provider-spaceman/internal/client"
+	"github.com/aurimasniekis/terraform-provider-spaceman/internal/client"
 )
 
 // Environment variables read when the provider block leaves a value out.

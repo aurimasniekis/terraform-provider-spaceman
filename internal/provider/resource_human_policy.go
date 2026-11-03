@@ -14,7 +14,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/aurimasniekis/go-spaceman/terraform-provider-spaceman/internal/client"
+	"github.com/aurimasniekis/terraform-provider-spaceman/internal/client"
 )
 
 // humanPolicyTypes are the action types a policy can name (internal/human.PolicyTypes).

@@ -14,7 +14,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/aurimasniekis/go-spaceman/terraform-provider-spaceman/internal/client"
+	"github.com/aurimasniekis/terraform-provider-spaceman/internal/client"
 )
 
 // limitAttr is one overridable limit of the limits model (ADR-0036): its key in SpaceMan is its attribute name.

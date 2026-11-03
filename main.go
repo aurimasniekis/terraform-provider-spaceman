@@ -1,4 +1,4 @@
-// Command terraform-provider-spaceman is the SpaceMan Terraform provider (a nested module of the SpaceMan repository).
+// Command terraform-provider-spaceman is the SpaceMan Terraform provider.
 package main
 
 import (
@@ -9,7 +9,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 
-	"github.com/aurimasniekis/go-spaceman/terraform-provider-spaceman/internal/provider"
+	"github.com/aurimasniekis/terraform-provider-spaceman/internal/provider"
 )
 
 // version is set at build time (-ldflags "-X main.version=…").

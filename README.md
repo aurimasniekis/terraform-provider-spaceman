@@ -1,10 +1,11 @@
 # terraform-provider-spaceman
 
-The Terraform provider for [SpaceMan](../README.md): it manages a central's durable configuration through the
-administrative API (`/api/v1`). It lives in this repository as a nested Go module
-(`github.com/aurimasniekis/go-spaceman/terraform-provider-spaceman`) built on the HashiCorp
-[terraform-plugin-framework](https://developer.hashicorp.com/terraform/plugin/framework). Design decisions: ADR-0035 (phase 1) and ADR-0041
-(phase 2) in [`docs/DECISIONS.md`](../docs/DECISIONS.md).
+The Terraform provider for [SpaceMan](https://github.com/aurimasniekis/go-spaceman): it manages a central's durable
+configuration through the administrative API (`/api/v1`). Go module `github.com/aurimasniekis/terraform-provider-spaceman`,
+built on the HashiCorp [terraform-plugin-framework](https://developer.hashicorp.com/terraform/plugin/framework). Design
+decisions are SpaceMan's ADR-0035 (phase 1), ADR-0041 (phase 2) and ADR-0047 (this separate repository), in SpaceMan's
+`docs/DECISIONS.md`. Until the move into this repository the provider was developed in SpaceMan's
+`terraform-provider-spaceman/` directory; its history came along.
 
 Status: **phases 1 and 2** of work package M5-01. Not published to a registry.
 
@@ -78,7 +79,6 @@ The [registry documentation](docs/index.md) has the details of every resource.
 ## Using it locally
 
 ```sh
-cd terraform-provider-spaceman
 go build -o ~/.terraform.d/spaceman-dev/terraform-provider-spaceman .
 cat > ~/.terraformrc-spaceman <<'EOF'
 provider_installation {
@@ -96,17 +96,17 @@ terraform -chdir=examples/complete plan
 
 ## Development
 
-From the repository root:
-
 | Target | What it does |
 |---|---|
-| `make tf-test` | `go vet` and unit tests (client, schema validity, conversions, plan modifiers, docs drift). Part of `make check`. |
-| `make tf-lint` | golangci-lint with the repository's configuration. |
-| `make tf-acc` | Acceptance tests (`TF_ACC=1`) against a real local central (see below). Needs Go and Terraform ≥ 1.11. |
-| `make tf-docs` | Regenerates `docs/` from the schemas and `examples/`. |
+| `make test` | `go vet` and unit tests (client, schema validity, conversions, plan modifiers, docs drift). No SpaceMan needed. |
+| `make lint` | golangci-lint with this repository's configuration. |
+| `make check` | `test` and `lint`. |
+| `make acc` | Acceptance tests (`TF_ACC=1`) against a real local central (see below). Needs Go, Terraform ≥ 1.11 and a SpaceMan checkout. |
+| `make docs` | Regenerates `docs/` from the schemas and `examples/`. |
 
-The acceptance harness (`internal/provider/harness_test.go`) builds `spaceman` and `devpulse` from the parent module,
-initializes a KEK and a central in a fresh temporary directory, bootstraps it (root token generated at run time, never
+The acceptance harness (`internal/provider/harness_test.go`) builds `spaceman` and `devpulse` from a SpaceMan checkout:
+`SPACEMAN_SRC` when set, otherwise `../spaceman` next to this repository. A provider change that needs a new SpaceMan API
+therefore needs the matching SpaceMan checkout. It initializes a KEK and a central in a fresh temporary directory, bootstraps it (root token generated at run time, never
 printed), starts `spaceman serve` on a random loopback port, registers two nodes and runs every `TestAcc*` test: create,
 update, import, drift from direct API edits, write-only secret rotation, version publication without perpetual diffs, and
 a `node_id` change planned in place and sent to SpaceMan as a relocation (refused there: the harness runs no node agents), and

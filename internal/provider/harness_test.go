@@ -1,6 +1,7 @@
 package provider
 
-// The acceptance-test harness (TF_ACC=1): it builds `spaceman` and `devpulse` from the parent module, starts a throwaway
+// The acceptance-test harness (TF_ACC=1): it builds `spaceman` and `devpulse` from a SpaceMan checkout (SPACEMAN_SRC, or
+// the sibling directory ../spaceman next to this repository), starts a throwaway
 // central on a random loopback port with its own data directory and KEK, bootstraps it, and registers two nodes. It
 // stops only the processes it started and removes only the directory it created (SM_TF_KEEP=1 keeps the directory).
 // The root token is generated at run time and never printed.
@@ -24,7 +25,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov6"
 
-	"github.com/aurimasniekis/go-spaceman/terraform-provider-spaceman/internal/client"
+	"github.com/aurimasniekis/terraform-provider-spaceman/internal/client"
 )
 
 // accEnv describes the running dev server.
@@ -80,20 +81,37 @@ func testAccPreCheck(t *testing.T) {
 	}
 }
 
-// repoRoot finds the parent SpaceMan module.
+// spacemanModule is the first line of the SpaceMan module's go.mod.
+const spacemanModule = "module github.com/aurimasniekis/go-spaceman\n"
+
+// repoRoot finds the SpaceMan checkout the acceptance tests build central from: SPACEMAN_SRC when set, otherwise the
+// sibling directory ../spaceman next to this repository (the provider lives in its own repository, ADR-0047 of SpaceMan).
 func repoRoot() (string, error) {
+	isSpaceman := func(dir string) bool {
+		b, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+		return err == nil && bytes.HasPrefix(b, []byte(spacemanModule))
+	}
+	if dir := os.Getenv("SPACEMAN_SRC"); dir != "" {
+		if !isSpaceman(dir) {
+			return "", fmt.Errorf("SPACEMAN_SRC=%s is not a SpaceMan checkout (github.com/aurimasniekis/go-spaceman)", dir)
+		}
+		return dir, nil
+	}
 	dir, err := os.Getwd()
 	if err != nil {
 		return "", err
 	}
 	for {
-		b, err := os.ReadFile(filepath.Join(dir, "go.mod"))
-		if err == nil && bytes.HasPrefix(b, []byte("module github.com/aurimasniekis/go-spaceman\n")) {
-			return dir, nil
+		if b, err := os.ReadFile(filepath.Join(dir, "go.mod")); err == nil && bytes.HasPrefix(b, []byte("module github.com/aurimasniekis/terraform-provider-spaceman\n")) {
+			sibling := filepath.Join(filepath.Dir(dir), "spaceman")
+			if isSpaceman(sibling) {
+				return sibling, nil
+			}
+			return "", fmt.Errorf("no SpaceMan checkout at %s: set SPACEMAN_SRC to one (github.com/aurimasniekis/go-spaceman)", sibling)
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			return "", errors.New("the SpaceMan module (github.com/aurimasniekis/go-spaceman) was not found above the provider")
+			return "", errors.New("the provider module was not found above the working directory")
 		}
 		dir = parent
 	}

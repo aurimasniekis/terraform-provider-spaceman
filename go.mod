@@ -1,4 +1,4 @@
-module github.com/aurimasniekis/go-spaceman/terraform-provider-spaceman
+module github.com/aurimasniekis/terraform-provider-spaceman
 
 go 1.27.3
 
