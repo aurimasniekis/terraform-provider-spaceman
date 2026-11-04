@@ -244,8 +244,8 @@ state is refused unless ` + "`relocation_dirty_state = \"export\"`" + `, the des
 move in one step. The space must be paused with no active runs, or set ` + "`relocation_stop_runs = true`" + `; it stays paused on the
 new node. A refused relocation fails the apply and stays blocked in SpaceMan; applying again resumes it. The provider never
 destroys and recreates a space to move it, and it does not offer the unavailable-source flow (an explicit operator
-acknowledgement in the UI or API). Nodes themselves are enrolled with a one-time token outside Terraform and are read with
-the ` + "`spaceman_node`" + ` data sources.
+acknowledgement in the UI or API). A node can be registered with ` + "`spaceman_node`" + `, which returns its one-time
+enrollment token, and its connection is read with the ` + "`spaceman_node`" + ` data sources.
 `
 
 func renderIndex(t *testing.T) string {

@@ -37,6 +37,7 @@ var spaceLimitAttrs = []limitAttr{
 	{"max_human_pending_per_run", "Open human actions one agent run asked (1-500)."},
 	{"max_tool_calls_per_run", "SpaceMan and MCP gateway tool calls of one run (0-1000000; 0: no limit)."},
 	{"ingest_per_minute", "Events one subscription ingests per minute; the rest waits in the stream (1-60000)."},
+	{"event_depth", "SpaceMan ingestions an inbound event may already have passed through (its `spaceman-depth` header); deeper events are quarantined, which ends event loops between installations (1-64)."},
 	{"task_deadline_minutes", "How long a top-level task may run before control and the operators are told (0-43200; 0: none; never stops a task)."},
 	{"storage_quota_bytes", "Attachment bytes stored for the space (1 MiB-1 TiB)."},
 	{"budget_tokens_24h", "Reported tokens of runs started in the last 24 hours (0: no budget). Usage-based and reported late: never a hard limit."},
@@ -49,6 +50,8 @@ var spaceLimitAttrs = []limitAttr{
 	{"retention_transcripts_days", "Days central keeps a run's stored native transcript (0-36500; 0: kept). Needs `retention:write`."},
 	{"retention_attachments_days", "Days an attachment is kept once every item using it is finished (0-36500; 0: kept); never deleted while an open item uses it. Needs `retention:write`."},
 	{"retention_human_actions_days", "Days a resolved, cancelled or expired human action is kept (0-36500; 0: kept); kept while open work refers to it. Needs `retention:write`."},
+	{"control_autostart", "Start the space's control role when work waits for control and no control run is live, resuming the last control's session (1: on, 0: off; SpaceMan ADR-0056)."},
+	{"control_idle_stop_minutes", "Minutes control may sit idle before SpaceMan stops it; the next waiting work starts it again (0-10080; 0: never)."},
 }
 
 // ---- space limits ----

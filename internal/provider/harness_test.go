@@ -248,7 +248,7 @@ log: {level: info, format: text}
 	}
 	ctx := context.Background()
 	for i, n := range []**client.Node{&env.nodeA, &env.nodeB} {
-		e, err := env.client.CreateNode(ctx, fmt.Sprintf("tf-node-%c", 'a'+i))
+		e, err := env.client.CreateNode(ctx, client.CreateNodeInput{Name: fmt.Sprintf("tf-node-%c", 'a'+i)})
 		if err != nil {
 			return env, fmt.Errorf("create node: %w", err)
 		}

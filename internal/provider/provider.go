@@ -117,6 +117,7 @@ func (p *spacemanProvider) Configure(ctx context.Context, req provider.Configure
 
 func (p *spacemanProvider) Resources(context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
+		newNodeResource,
 		newSpaceResource,
 		newSpaceRoleResource,
 		newSpaceAccountsResource,
