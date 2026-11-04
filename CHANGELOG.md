@@ -5,11 +5,16 @@ All notable changes to this provider are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.1.0-rc.5] - 2026-11-04
+
+Fifth release candidate, released with SpaceMan 0.1.0-rc.5 (there is no provider 0.1.0-rc.4: the numbers follow
+SpaceMan's). The new attributes need SpaceMan 0.1.0-rc.5 or later.
+
 ### Added
 - `spaceman_node` registers a node and returns its one-time `enrollment_token` (sensitive) for the host's provisioning.
   It edits the node's name, description and labels in place (SpaceMan's new `PUT /nodes/{id}`). `enabled` disables and
   enables the node, and changing `enrollment_version` issues a new token. Destroying it revokes the node unless
-  `revoke_on_destroy = false`. It needs a SpaceMan release with `PUT /nodes/{id}`.
+  `revoke_on_destroy = false`. It needs SpaceMan 0.1.0-rc.5 or later.
 - `spaceman_space_limits` manages `control_autostart` and `control_idle_stop_minutes`: whether SpaceMan starts the
   space's control for waiting work, and when it stops an idle control (SpaceMan ADR-0056). It also manages
   `event_depth`, which SpaceMan spaces could already override but the provider did not expose.
@@ -58,6 +63,7 @@ First release candidate (pre-release; not production-ready, see SpaceMan's docs/
 - `spaceman_human_action_policy`: `response_inbox` (`off`, `routed` or `always`), whether a response also becomes an
   inbox item (SpaceMan SM-INBOX-001, ADR-0049). Without the attribute, the provider's writes reset the policy to `off`.
 
-[Unreleased]: https://github.com/aurimasniekis/terraform-provider-spaceman/compare/v0.1.0-rc.3...HEAD
+[Unreleased]: https://github.com/aurimasniekis/terraform-provider-spaceman/compare/v0.1.0-rc.5...HEAD
+[0.1.0-rc.5]: https://github.com/aurimasniekis/terraform-provider-spaceman/releases/tag/v0.1.0-rc.5
 [0.1.0-rc.3]: https://github.com/aurimasniekis/terraform-provider-spaceman/releases/tag/v0.1.0-rc.3
 [0.1.0-rc.2]: https://github.com/aurimasniekis/terraform-provider-spaceman/releases/tag/v0.1.0-rc.2
