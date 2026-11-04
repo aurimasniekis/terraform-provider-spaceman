@@ -5,6 +5,10 @@ All notable changes to this provider are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.1.0-rc.1] - 2026-11-04
+
+First release candidate (pre-release; not production-ready, see SpaceMan's docs/RELEASE_READINESS.md).
+
 ### Changed
 - `spaceman_user`: `email` and `display_name` are updated in place through `PUT /users/{id}/profile` instead of being
   refused at plan time. Changing a password user's email ends that user's sessions in SpaceMan.
@@ -30,3 +34,6 @@ All notable changes to this provider are documented here. The format is based on
   its space is paused (SpaceMan SM-EVT-014, ADR-0049).
 - `spaceman_human_action_policy`: `response_inbox` (`off`, `routed` or `always`), whether a response also becomes an
   inbox item (SpaceMan SM-INBOX-001, ADR-0049). Without the attribute, the provider's writes reset the policy to `off`.
+
+[Unreleased]: https://github.com/aurimasniekis/terraform-provider-spaceman/compare/v0.1.0-rc.1...HEAD
+[0.1.0-rc.1]: https://github.com/aurimasniekis/terraform-provider-spaceman/releases/tag/v0.1.0-rc.1
