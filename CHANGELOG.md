@@ -5,6 +5,11 @@ All notable changes to this provider are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- `spaceman_space_limits` manages `control_autostart` and `control_idle_stop_minutes`: whether SpaceMan starts the
+  space's control for waiting work, and when it stops an idle control (SpaceMan ADR-0056). It also manages
+  `event_depth`, which SpaceMan spaces could already override but the provider did not expose.
+
 ## [0.1.0-rc.3] - 2026-11-04
 
 Third release candidate, the first for the Terraform Registry: a release workflow (GoReleaser) builds the zips, the
