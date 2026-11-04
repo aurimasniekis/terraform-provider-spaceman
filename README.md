@@ -14,6 +14,7 @@ Status: **phases 1 and 2** of work package M5-01. Not published to a registry.
 
 | Resource | API |
 |---|---|
+| `spaceman_node` | `/nodes` (returns the one-time enrollment token; revoke on destroy, opt-out) |
 | `spaceman_space` | `/spaces` (archive on destroy, purge opt-in; a `node_id` change relocates through `/spaces/{id}/relocation`) |
 | `spaceman_space_role` | `/spaces/{id}/roles/{name}` |
 | `spaceman_space_accounts` | `/spaces/{id}/accounts` (the whole binding set) |
@@ -50,7 +51,7 @@ Data sources: `spaceman_node`, `spaceman_nodes`, `spaceman_space`, `spaceman_spa
 `spaceman_space_limits` (effective values and sources), `spaceman_user`.
 
 Never managed: runtime state (runs, tasks, inbox items, messages, schedule occurrences, cross-space requests,
-human-action requests and responses, approvals, recordings), nodes (enrolled with a one-time token), API tokens, password
+human-action requests and responses, approvals, recordings), a node's connection and capacity, API tokens, password
 reset tokens and SSO link invitations (shown once), passwords and MFA enrollment.
 
 Not available: the backup target and schedule (configuration file only).

@@ -21,10 +21,18 @@ type Node struct {
 	Version      int64             `json:"version"`
 }
 
-// NodeEnrollment is the response of POST /nodes (tests only: the provider does not manage nodes).
+// CreateNodeInput is the body of POST /nodes and PUT /nodes/{id}.
+type CreateNodeInput struct {
+	Name        string            `json:"name"`
+	Description string            `json:"description,omitempty"`
+	Labels      map[string]string `json:"labels,omitempty"`
+}
+
+// NodeEnrollment is a node with its one-time enrollment token (POST /nodes, POST /nodes/{id}/enrollment).
 type NodeEnrollment struct {
-	Node  *Node  `json:"node"`
-	Token string `json:"token"`
+	Node      *Node  `json:"node"`
+	Token     string `json:"token"`
+	ExpiresAt string `json:"expires_at"`
 }
 
 // Space is a space pinned to a node.

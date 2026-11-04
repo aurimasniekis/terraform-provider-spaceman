@@ -6,6 +6,10 @@ All notable changes to this provider are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- `spaceman_node` registers a node and returns its one-time `enrollment_token` (sensitive) for the host's provisioning.
+  It edits the node's name, description and labels in place (SpaceMan's new `PUT /nodes/{id}`). `enabled` disables and
+  enables the node, and changing `enrollment_version` issues a new token. Destroying it revokes the node unless
+  `revoke_on_destroy = false`. It needs a SpaceMan release with `PUT /nodes/{id}`.
 - `spaceman_space_limits` manages `control_autostart` and `control_idle_stop_minutes`: whether SpaceMan starts the
   space's control for waiting work, and when it stops an idle control (SpaceMan ADR-0056). It also manages
   `event_depth`, which SpaceMan spaces could already override but the provider did not expose.

@@ -27,10 +27,29 @@ func (c *Client) GetNode(ctx context.Context, id string) (*Node, error) {
 	return &out, c.get(ctx, "/nodes/"+esc(id), &out)
 }
 
-// CreateNode is POST /nodes. The provider does not manage nodes (enrollment is a one-time secret); tests use it.
-func (c *Client) CreateNode(ctx context.Context, name string) (*NodeEnrollment, error) {
+// CreateNode is POST /nodes: it registers the node and returns its one-time enrollment token.
+func (c *Client) CreateNode(ctx context.Context, in CreateNodeInput) (*NodeEnrollment, error) {
 	var out NodeEnrollment
-	return &out, c.create(ctx, "/nodes", map[string]string{"name": name}, &out)
+	return &out, c.create(ctx, "/nodes", in, &out)
+}
+
+// UpdateNode is PUT /nodes/{id} (name, description and labels).
+func (c *Client) UpdateNode(ctx context.Context, id string, version int64, in CreateNodeInput) (*Node, error) {
+	var out Node
+	return &out, c.put(ctx, "/nodes/"+esc(id), version, in, &out)
+}
+
+// ReissueEnrollment is POST /nodes/{id}/enrollment: a new one-time token (using it re-enrolls the node and replaces its
+// credentials).
+func (c *Client) ReissueEnrollment(ctx context.Context, id string) (*NodeEnrollment, error) {
+	var out NodeEnrollment
+	return &out, c.post(ctx, "/nodes/"+esc(id)+"/enrollment", 0, nil, &out)
+}
+
+// SetNodeState is POST /nodes/{id}/state (active, disabled or revoked; revoked is permanent).
+func (c *Client) SetNodeState(ctx context.Context, id, state string) (*Node, error) {
+	var out Node
+	return &out, c.post(ctx, "/nodes/"+esc(id)+"/state", 0, map[string]string{"state": state}, &out)
 }
 
 // ---- spaces ----
