@@ -5,6 +5,11 @@ All notable changes to this provider are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.1.0-rc.2] - 2026-11-04
+
+Second release candidate, released alongside SpaceMan 0.1.0-rc.2 (which fixes Codex runs with an OpenAI API key).
+No provider changes since 0.1.0-rc.1, whose unpublished draft was withdrawn.
+
 ## [0.1.0-rc.1] - 2026-11-04
 
 First release candidate (pre-release; not production-ready, see SpaceMan's docs/RELEASE_READINESS.md).
@@ -35,5 +40,5 @@ First release candidate (pre-release; not production-ready, see SpaceMan's docs/
 - `spaceman_human_action_policy`: `response_inbox` (`off`, `routed` or `always`), whether a response also becomes an
   inbox item (SpaceMan SM-INBOX-001, ADR-0049). Without the attribute, the provider's writes reset the policy to `off`.
 
-[Unreleased]: https://github.com/aurimasniekis/terraform-provider-spaceman/compare/v0.1.0-rc.1...HEAD
-[0.1.0-rc.1]: https://github.com/aurimasniekis/terraform-provider-spaceman/releases/tag/v0.1.0-rc.1
+[Unreleased]: https://github.com/aurimasniekis/terraform-provider-spaceman/compare/v0.1.0-rc.2...HEAD
+[0.1.0-rc.2]: https://github.com/aurimasniekis/terraform-provider-spaceman/releases/tag/v0.1.0-rc.2
