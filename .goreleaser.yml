@@ -1,0 +1,53 @@
+# Release build for the Terraform Registry (.github/workflows/release.yml): zips per platform with the binary named
+# terraform-provider-spaceman_v<version>, the registry manifest, SHA256SUMS over both, and a detached GPG signature of
+# SHA256SUMS made with the key whose public half is registered in the Terraform Registry.
+version: 2
+project_name: terraform-provider-spaceman
+builds:
+  - env:
+      - CGO_ENABLED=0
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    goos: [linux, darwin, windows, freebsd]
+    goarch: [amd64, arm64]
+    ignore:
+      - goos: windows
+        goarch: arm64
+    binary: "{{ .ProjectName }}_v{{ .Version }}"
+archives:
+  - formats: [zip]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - NOTICE
+      - README.md
+      - CHANGELOG.md
+checksum:
+  name_template: "{{ .ProjectName }}_{{ .Version }}_SHA256SUMS"
+  algorithm: sha256
+  extra_files:
+    - glob: terraform-registry-manifest.json
+      name_template: "{{ .ProjectName }}_{{ .Version }}_manifest.json"
+signs:
+  - artifacts: checksum
+    args:
+      - --batch
+      - --local-user
+      - "{{ .Env.GPG_FINGERPRINT }}"
+      - --output
+      - "${signature}"
+      - --detach-sign
+      - "${artifact}"
+release:
+  # The Terraform Registry reads published GitHub releases; release candidates are published as ordinary releases (as
+  # v0.1.0-rc.2 was, which the Registry picked up) and Terraform still treats their -rc versions as pre-releases.
+  draft: false
+  prerelease: false
+  extra_files:
+    - glob: terraform-registry-manifest.json
+      name_template: "{{ .ProjectName }}_{{ .Version }}_manifest.json"
+changelog:
+  disable: true

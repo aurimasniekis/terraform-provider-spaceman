@@ -5,3 +5,6 @@
 *.tfstate
 *.tfstate.*
 crash.log
+
+# GoReleaser output
+/dist/
