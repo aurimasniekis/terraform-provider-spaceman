@@ -69,7 +69,7 @@ func TestAccSpaceRepositorySSHKey(t *testing.T) {
 		},
 		resource.TestStep{ResourceName: "spaceman_space_repository.api", ImportState: true, ImportStateVerify: true,
 			ImportStateVerifyIgnore: []string{"ssh_key_version"},
-			ImportStateIdFunc: func(s *terraform.State) (string, error) { return stateAttr(s, "spaceman_space.s", "id") + "/api", nil }},
+			ImportStateIdFunc:       func(s *terraform.State) (string, error) { return stateAttr(s, "spaceman_space.s", "id") + "/api", nil }},
 		resource.TestStep{
 			Config: sshRepoHCL(slug, acc.nodeA.ID, "  ssh_key = false"),
 			Check: resource.ComposeAggregateTestCheckFunc(
@@ -77,8 +77,11 @@ func TestAccSpaceRepositorySSHKey(t *testing.T) {
 				resource.TestCheckResourceAttr("spaceman_space_repository.api", "ssh_public_key", ""),
 				apiCheck("spaceman_space_repository.api", func(ctx context.Context, c *client.Client, id string, s *terraform.State) error {
 					r, err := c.GetSpaceRepository(ctx, stateAttr(s, "spaceman_space.s", "id"), id)
-					if err != nil || r.SSHKey != nil {
-						return fmt.Errorf("key still there: %+v %v", r, err)
+					if err != nil {
+						return err
+					}
+					if r.SSHKey != nil {
+						return fmt.Errorf("key still there: %+v", r.SSHKey)
 					}
 					return nil
 				}),
