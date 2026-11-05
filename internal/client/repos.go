@@ -17,7 +17,12 @@ type SpaceRepository struct {
 	DefaultBranch string `json:"default_branch"`
 	Role          string `json:"role"`
 	ClonePolicy   string `json:"clone_policy"`
-	Version       int64  `json:"version"`
+	KnownHosts    string `json:"known_hosts"`
+	SSHKey        *struct {
+		PublicKey   string `json:"public_key"`
+		Fingerprint string `json:"fingerprint"`
+	} `json:"ssh_key,omitempty"`
+	Version int64 `json:"version"`
 }
 
 // SpaceRepositoryInput creates or edits a repository. Name and Path are sent on create only (they are fixed).
@@ -29,6 +34,7 @@ type SpaceRepositoryInput struct {
 	DefaultBranch string `json:"default_branch,omitempty"`
 	Role          string `json:"role,omitempty"`
 	ClonePolicy   string `json:"clone_policy,omitempty"`
+	KnownHosts    string `json:"known_hosts,omitempty"`
 }
 
 func repoPath(spaceID, id string) string {
@@ -52,6 +58,19 @@ func (c *Client) CreateSpaceRepository(ctx context.Context, spaceID string, in S
 func (c *Client) UpdateSpaceRepository(ctx context.Context, spaceID, id string, version int64, in SpaceRepositoryInput) (*SpaceRepository, error) {
 	var out SpaceRepository
 	return &out, c.put(ctx, repoPath(spaceID, id), version, in, &out)
+}
+
+// GenerateRepositorySSHKey is POST /spaces/{id}/repositories/{repository}/ssh-key: a new SSH key (rotation when one
+// exists); only the public key comes back (SpaceMan ADR-0057).
+func (c *Client) GenerateRepositorySSHKey(ctx context.Context, spaceID, id string, version int64) (*SpaceRepository, error) {
+	var out SpaceRepository
+	return &out, c.post(ctx, repoPath(spaceID, id)+"/ssh-key", version, nil, &out)
+}
+
+// RemoveRepositorySSHKey is DELETE /spaces/{id}/repositories/{repository}/ssh-key.
+func (c *Client) RemoveRepositorySSHKey(ctx context.Context, spaceID, id string, version int64) (*SpaceRepository, error) {
+	var out SpaceRepository
+	return &out, c.do2(ctx, http.MethodDelete, repoPath(spaceID, id)+"/ssh-key", version, nil, &out)
 }
 
 // DeleteSpaceRepository is DELETE /spaces/{id}/repositories/{repository}; the folder on the node stays.
