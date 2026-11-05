@@ -5,6 +5,15 @@ All notable changes to this provider are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- `spaceman_space_repository` manages repository SSH keys held by SpaceMan (SpaceMan ADR-0057):
+  - `ssh_key = true` generates one, and `ssh_key = false` removes it; left unset, the key isn't managed;
+  - changing `ssh_key_version` rotates it;
+  - `ssh_public_key` and `ssh_key_fingerprint` feed a deploy-key resource. The private key never reaches Terraform;
+  - `known_hosts` pins the Git host's SSH keys.
+
+  It needs SpaceMan 0.1.0-rc.6 or later.
+
 ## [0.1.0-rc.5] - 2026-11-04
 
 Fifth release candidate, released with SpaceMan 0.1.0-rc.5 (there is no provider 0.1.0-rc.4: the numbers follow
