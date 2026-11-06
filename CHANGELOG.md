@@ -5,6 +5,11 @@ All notable changes to this provider are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- `spaceman_git_ssh_key`: a shared Git SSH key SpaceMan generates and holds (SpaceMan ADR-0058), for the spaces it lists
+  or every space, rotated by changing `key_version`; its `public_key` goes on a Git account, preferably a read-only
+  machine user. `spaceman_space_repository.git_key_id` clones a repository with it. Needs SpaceMan 0.1.0-rc.8 or later.
+
 ## [0.1.0-rc.7] - 2026-11-06
 
 Seventh release candidate, released with SpaceMan 0.1.0-rc.7: security updates only.
