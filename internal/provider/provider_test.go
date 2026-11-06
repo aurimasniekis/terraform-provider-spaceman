@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -172,9 +173,32 @@ func TestConversions(t *testing.T) {
 	if mapValue(nil).IsNull() || listValue(nil).IsNull() || len(listValue(nil).Elements()) != 0 {
 		t.Fatal("nil converts to empty, not null")
 	}
-	refs := skillRefs(ctx, skillRefsValue([]client.SkillRef{{SkillID: "skl_1"}, {SkillID: "skl_2", Pin: "skv_1"}}), &d)
+	apiRefs := []client.SkillRef{{SkillID: "skl_1"}, {SkillID: "skl_2", Pin: "skv_1"}}
+	refs := skillRefs(ctx, skillRefsValue(apiRefs, types.ListNull(skillRefType)), &d)
 	if len(refs) != 2 || refs[1].Pin != "skv_1" || refs[0].Pin != "" {
 		t.Fatalf("skill refs = %+v", refs)
+	}
+	// No pin is null unless the prior value said "" for the same skill at the same position.
+	pinAt := func(l types.List, i int) types.String {
+		return l.Elements()[i].(types.Object).Attributes()["pin"].(types.String)
+	}
+	ref := func(id string, pin types.String) attr.Value {
+		return types.ObjectValueMust(skillRefType.AttrTypes, map[string]attr.Value{"skill_id": types.StringValue(id), "pin": pin})
+	}
+	if v := skillRefsValue(apiRefs, types.ListNull(skillRefType)); !pinAt(v, 0).IsNull() || pinAt(v, 1).ValueString() != "skv_1" {
+		t.Fatalf("no prior: %v", v)
+	}
+	prior := types.ListValueMust(skillRefType, []attr.Value{ref("skl_1", types.StringValue("")), ref("skl_2", types.StringNull())})
+	if v := skillRefsValue(apiRefs, prior); pinAt(v, 0).IsNull() || pinAt(v, 0).ValueString() != "" {
+		t.Fatalf("prior empty pin kept: %v", v)
+	}
+	moved := types.ListValueMust(skillRefType, []attr.Value{ref("skl_9", types.StringValue(""))})
+	if v := skillRefsValue(apiRefs, moved); !pinAt(v, 0).IsNull() {
+		t.Fatalf("another skill's empty pin: %v", v)
+	}
+	unknown := types.ListValueMust(skillRefType, []attr.Value{ref("skl_1", types.StringUnknown())})
+	if v := skillRefsValue(apiRefs, unknown); !pinAt(v, 0).IsNull() {
+		t.Fatalf("unknown planned pin: %v", v)
 	}
 	if boolPtr(types.BoolNull()) != nil || *boolPtr(types.BoolValue(false)) != false || strPtr(types.StringUnknown()) != nil {
 		t.Fatal("pointers")

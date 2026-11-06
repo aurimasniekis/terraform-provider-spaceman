@@ -349,6 +349,7 @@ func TestAccCatalog(t *testing.T) {
 				resource.TestCheckResourceAttrPair("spaceman_prompt.p", "extends", "spaceman_prompt.base", "latest_version_id"),
 				resource.TestCheckResourceAttr("spaceman_skill.k", "latest_version", "1"),
 				resource.TestCheckResourceAttr("spaceman_role_template.t", "skills.#", "1"),
+				resource.TestCheckNoResourceAttr("spaceman_role_template.t", "skills.0.pin"),
 				resource.TestCheckResourceAttrPair("spaceman_space_role.r", "prompt_pin", "spaceman_prompt.p", "latest_version_id"),
 				func(s *terraform.State) error { promptID = stateAttr(s, "spaceman_prompt.p", "id"); return nil },
 			),
@@ -409,7 +410,30 @@ func TestAccCatalog(t *testing.T) {
 			PlanOnly:    true,
 			ExpectError: regexp.MustCompile(`A prompt's name cannot be changed`),
 		},
+		// A skill added to an existing role without a pin keeps the pin null (it follows the latest version).
+		resource.TestStep{
+			Config: catalogRoleSkillHCL(sfx, slug, ""),
+			Check: resource.ComposeAggregateTestCheckFunc(
+				resource.TestCheckResourceAttr("spaceman_space_role.r", "skills.#", "1"),
+				resource.TestCheckNoResourceAttr("spaceman_space_role.r", "skills.0.pin"),
+			),
+		},
+		resource.TestStep{Config: catalogRoleSkillHCL(sfx, slug, ""), PlanOnly: true},
+		// An explicit empty pin (the earlier workaround) applies and plans no change either.
+		resource.TestStep{
+			Config: catalogRoleSkillHCL(sfx, slug, `, pin = ""`),
+			Check:  resource.TestCheckResourceAttr("spaceman_space_role.r", "skills.0.pin", ""),
+		},
+		resource.TestStep{Config: catalogRoleSkillHCL(sfx, slug, `, pin = ""`), PlanOnly: true},
 	)
+}
+
+// catalogRoleSkillHCL is the catalog configuration with a skill added to the space role; pin is extra HCL for the
+// skill's object (empty for none).
+func catalogRoleSkillHCL(sfx, slug, pin string) string {
+	return strings.Replace(catalogHCL(sfx, slug, acc.nodeA.ID, "Version two.", "claude-opus-4-1"),
+		`instructions = "Work in small steps."`,
+		"instructions = \"Work in small steps.\"\n  skills       = [{ skill_id = spaceman_skill.k.id"+pin+" }]", 1)
 }
 
 func mcpHCL(sfx, spaceSlug, nodeID, token string, version int, tools string) string {
