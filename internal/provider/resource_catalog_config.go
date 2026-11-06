@@ -215,7 +215,7 @@ func (r *roleTemplateResource) toModel(t *client.RoleTemplate, m *roleTemplateMo
 	m.PromptPin = types.StringValue(t.PromptPin)
 	m.MemoryConventions = types.StringValue(t.MemoryConventions)
 	m.Settings = mapValue(t.Settings)
-	m.Skills = skillRefsValue(t.Skills)
+	m.Skills = skillRefsValue(t.Skills, m.Skills)
 	m.Revision = types.Int64Value(t.Revision)
 }
 
