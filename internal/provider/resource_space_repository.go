@@ -34,6 +34,7 @@ type spaceRepositoryModel struct {
 	SSHKeyVersion types.Int64  `tfsdk:"ssh_key_version"`
 	SSHPublicKey  types.String `tfsdk:"ssh_public_key"`
 	SSHKeyFP      types.String `tfsdk:"ssh_key_fingerprint"`
+	GitKeyID      types.String `tfsdk:"git_key_id"`
 }
 
 func (r *spaceRepositoryResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -72,6 +73,8 @@ func (r *spaceRepositoryResource) Schema(_ context.Context, _ resource.SchemaReq
 				MarkdownDescription: "Change this number to rotate the SSH key: SpaceMan replaces it at once, so update the host's deploy key in the same apply."},
 			"ssh_public_key":      computedString("The SSH key's public half (authorized_keys format), for the Git host's deploy key; empty without a key."),
 			"ssh_key_fingerprint": computedString("The SSH key's SHA256 fingerprint; empty without a key."),
+			"git_key_id": optString("A shared Git SSH key (`spaceman_git_ssh_key`, SpaceMan ADR-0058) the node clones and fetches with, instead of " +
+				"the repository's own key: SSH URLs only, the space must be allowed to use it, and `ssh_key` must not be `true`. `\"\"`: none."),
 		},
 	}
 }
@@ -88,6 +91,10 @@ func (r *spaceRepositoryResource) toModel(s *client.SpaceRepository, m *spaceRep
 	m.ClonePolicy = types.StringValue(s.ClonePolicy)
 	m.KnownHosts = keepTrimmed(m.KnownHosts, s.KnownHosts)
 	m.SSHKey = types.BoolValue(s.SSHKey != nil)
+	m.GitKeyID = types.StringValue("")
+	if s.GitKey != nil {
+		m.GitKeyID = types.StringValue(s.GitKey.ID)
+	}
 	m.SSHPublicKey, m.SSHKeyFP = types.StringValue(""), types.StringValue("")
 	if s.SSHKey != nil {
 		m.SSHPublicKey, m.SSHKeyFP = types.StringValue(s.SSHKey.PublicKey), types.StringValue(s.SSHKey.Fingerprint)
@@ -135,7 +142,8 @@ func (r *spaceRepositoryResource) ModifyPlan(ctx context.Context, req resource.M
 
 func (r *spaceRepositoryResource) input(m *spaceRepositoryModel, create bool) client.SpaceRepositoryInput {
 	in := client.SpaceRepositoryInput{Description: strOrEmpty(m.Description), URL: strOrEmpty(m.URL), DefaultBranch: strOrEmpty(m.DefaultBranch),
-		Role: strOrEmpty(m.Role), ClonePolicy: strOrEmpty(m.ClonePolicy), KnownHosts: strOrEmpty(m.KnownHosts)}
+		Role: strOrEmpty(m.Role), ClonePolicy: strOrEmpty(m.ClonePolicy), KnownHosts: strOrEmpty(m.KnownHosts),
+		GitKeyID: strOrEmpty(m.GitKeyID)}
 	if create {
 		in.Name, in.Path = m.Name.ValueString(), strOrEmpty(m.Path)
 	}
@@ -193,6 +201,15 @@ func (r *spaceRepositoryResource) Update(ctx context.Context, req resource.Updat
 		cur, err := r.c.GetSpaceRepository(ctx, prior.SpaceID.ValueString(), prior.ID.ValueString())
 		if err != nil {
 			addAPIError(&resp.Diagnostics, "Could not read the repository", err)
+			return
+		}
+		v = cur.Version
+	}
+	// A repository uses either its own key or a shared one: remove its own key first, so the update may choose a shared key.
+	if !m.SSHKey.IsNull() && !m.SSHKey.IsUnknown() && !m.SSHKey.ValueBool() && prior.SSHKey.ValueBool() {
+		cur, err := r.c.RemoveRepositorySSHKey(ctx, prior.SpaceID.ValueString(), prior.ID.ValueString(), v)
+		if err != nil {
+			addAPIError(&resp.Diagnostics, "Could not remove the repository's SSH key", err)
 			return
 		}
 		v = cur.Version

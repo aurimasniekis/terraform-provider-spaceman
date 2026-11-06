@@ -18,7 +18,10 @@ type SpaceRepository struct {
 	Role          string `json:"role"`
 	ClonePolicy   string `json:"clone_policy"`
 	KnownHosts    string `json:"known_hosts"`
-	SSHKey        *struct {
+	GitKey        *struct {
+		ID string `json:"id"`
+	} `json:"git_key,omitempty"`
+	SSHKey *struct {
 		PublicKey   string `json:"public_key"`
 		Fingerprint string `json:"fingerprint"`
 	} `json:"ssh_key,omitempty"`
@@ -35,6 +38,7 @@ type SpaceRepositoryInput struct {
 	Role          string `json:"role,omitempty"`
 	ClonePolicy   string `json:"clone_policy,omitempty"`
 	KnownHosts    string `json:"known_hosts,omitempty"`
+	GitKeyID      string `json:"git_key_id,omitempty"`
 }
 
 func repoPath(spaceID, id string) string {

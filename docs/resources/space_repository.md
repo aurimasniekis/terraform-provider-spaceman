@@ -64,6 +64,7 @@ resource "github_repository_deploy_key" "ledger" {
 - `clone_policy` (String) `auto` (default with a URL: cloned while the node holds the space's lease), `on_demand` (cloned when a run needs it or on a sync) or `manual` (default without a URL: never cloned by SpaceMan).
 - `default_branch` (String) The branch the node checks out and reports on (default `main`).
 - `description` (String) Description.
+- `git_key_id` (String) A shared Git SSH key (`spaceman_git_ssh_key`, SpaceMan ADR-0058) the node clones and fetches with, instead of the repository's own key: SSH URLs only, the space must be allowed to use it, and `ssh_key` must not be `true`. `""`: none.
 - `known_hosts` (String) known_hosts lines pinning the Git host's SSH keys, used with `ssh_key`. Empty: SpaceMan's built-in pins (github.com).
 - `path` (String) Folder relative to the space folder (default the name), for example `repos/api`; not in `instances/`, `worktrees/`, `work/` or `dreams/`. Changing it replaces the repository (the old folder stays on the node).
 - `role` (String) `code` (default) or `kb` (a knowledge base's repository).

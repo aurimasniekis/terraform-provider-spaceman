@@ -19,6 +19,7 @@ Status: **phases 1 and 2** of work package M5-01. Not published to a registry.
 | `spaceman_space_role` | `/spaces/{id}/roles/{name}` |
 | `spaceman_space_accounts` | `/spaces/{id}/accounts` (the whole binding set) |
 | `spaceman_space_repository` | `/spaces/{id}/repositories/{name}` (a configured repository; path changes replace it) |
+| `spaceman_git_ssh_key` | `/git-ssh-keys/{id}` (a shared Git SSH key SpaceMan holds; `key_version` rotates it) |
 | `spaceman_account` | `/accounts` (write-only `secret_wo`) |
 | `spaceman_harness_profile` | `/harness-profiles` |
 | `spaceman_role_template` | `/role-templates` |
