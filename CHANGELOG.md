@@ -5,6 +5,11 @@ All notable changes to this provider are documented here. The format is based on
 
 ## [Unreleased]
 
+### Security
+- Updated `golang.org/x/net` (0.62.0), `google.golang.org/grpc` (1.85.0) and `golang.org/x/text` (0.43.0). govulncheck
+  reported nine vulnerabilities that the provider's code reaches through them (GO-2026-6617, -6612, -6611, -6603,
+  -6443, -6348, -6061, -5970, -5026). CI now runs govulncheck.
+
 ## [0.1.0-rc.6] - 2026-11-05
 
 Sixth release candidate, released with SpaceMan 0.1.0-rc.6.
