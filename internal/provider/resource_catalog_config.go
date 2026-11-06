@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 
+	"github.com/hashicorp/terraform-plugin-framework-jsontypes/jsontypes"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -19,14 +20,16 @@ type harnessProfileResource struct{ base }
 func newHarnessProfileResource() resource.Resource { return &harnessProfileResource{} }
 
 type harnessProfileModel struct {
-	ID          types.String `tfsdk:"id"`
-	Slug        types.String `tfsdk:"slug"`
-	Name        types.String `tfsdk:"name"`
-	Harness     types.String `tfsdk:"harness"`
-	Model       types.String `tfsdk:"model"`
-	Settings    types.Map    `tfsdk:"settings"`
-	Description types.String `tfsdk:"description"`
-	Revision    types.Int64  `tfsdk:"revision"`
+	ID       types.String `tfsdk:"id"`
+	Slug     types.String `tfsdk:"slug"`
+	Name     types.String `tfsdk:"name"`
+	Harness  types.String `tfsdk:"harness"`
+	Model    types.String `tfsdk:"model"`
+	Settings types.Map    `tfsdk:"settings"`
+	// ClaudeSettings are the profile's Claude Code settings (SpaceMan ADR-0059).
+	ClaudeSettings jsontypes.Normalized `tfsdk:"claude_settings"`
+	Description    types.String         `tfsdk:"description"`
+	Revision       types.Int64          `tfsdk:"revision"`
 }
 
 func (r *harnessProfileResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -46,10 +49,11 @@ func (r *harnessProfileResource) Schema(_ context.Context, _ resource.SchemaRequ
 			"harness": schema.StringAttribute{Required: true, MarkdownDescription: "`claude-code` or `codex`. Fixed after creation.",
 				Validators:    []validatorString{stringvalidator.OneOf("claude-code", "codex")},
 				PlanModifiers: []planmodifier.String{fixedAfterCreate("A harness profile's harness")}},
-			"model":       optString("Model."),
-			"settings":    optMap("Harness settings (string values)."),
-			"description": optString("Description."),
-			"revision":    schema.Int64Attribute{Computed: true, MarkdownDescription: "Increments on every change."},
+			"model":           optString("Model."),
+			"settings":        optMap("Harness settings (string values)."),
+			"claude_settings": claudeSettingsAttr(),
+			"description":     optString("Description."),
+			"revision":        schema.Int64Attribute{Computed: true, MarkdownDescription: "Increments on every change."},
 		},
 	}
 }
@@ -61,13 +65,16 @@ func (r *harnessProfileResource) toModel(p *client.Profile, m *harnessProfileMod
 	m.Harness = types.StringValue(p.Harness)
 	m.Model = types.StringValue(p.Model)
 	m.Settings = mapValue(p.Settings)
+	m.ClaudeSettings = claudeSettingsValue(p.ClaudeSettings)
 	m.Description = types.StringValue(p.Description)
 	m.Revision = types.Int64Value(p.Revision)
 }
 
-func (r *harnessProfileResource) save(ctx context.Context, id string, version int64, m *harnessProfileModel, diags *diagnostics) *client.Profile {
+// save sends the plan; prior is the state's Claude Code settings (null on create), which decides whether a configuration
+// without them clears them or leaves the field out.
+func (r *harnessProfileResource) save(ctx context.Context, id string, version int64, m *harnessProfileModel, prior jsontypes.Normalized, diags *diagnostics) *client.Profile {
 	in := client.ProfileInput{Slug: m.Slug.ValueString(), Name: m.Name.ValueString(), Harness: m.Harness.ValueString(), Model: strOrEmpty(m.Model),
-		Settings: stringMap(ctx, m.Settings, diags), Description: strOrEmpty(m.Description)}
+		Settings: stringMap(ctx, m.Settings, diags), ClaudeSettings: claudeSettingsInput(m.ClaudeSettings, prior), Description: strOrEmpty(m.Description)}
 	if diags.HasError() {
 		return nil
 	}
@@ -85,7 +92,7 @@ func (r *harnessProfileResource) Create(ctx context.Context, req resource.Create
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	p := r.save(ctx, "", 0, &m, &resp.Diagnostics)
+	p := r.save(ctx, "", 0, &m, jsontypes.NewNormalizedNull(), &resp.Diagnostics)
 	if p == nil {
 		return
 	}
@@ -129,7 +136,7 @@ func (r *harnessProfileResource) Update(ctx context.Context, req resource.Update
 		}
 		v = cur.Version
 	}
-	p := r.save(ctx, prior.ID.ValueString(), v, &m, &resp.Diagnostics)
+	p := r.save(ctx, prior.ID.ValueString(), v, &m, prior.ClaudeSettings, &resp.Diagnostics)
 	if p == nil {
 		return
 	}

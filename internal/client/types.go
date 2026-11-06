@@ -155,25 +155,30 @@ type SkillRef struct {
 
 // Profile is a harness profile.
 type Profile struct {
-	ID          string            `json:"id"`
-	Slug        string            `json:"slug"`
-	Name        string            `json:"name"`
-	Harness     string            `json:"harness"`
-	Model       string            `json:"model,omitempty"`
-	Settings    map[string]string `json:"settings"`
-	Description string            `json:"description,omitempty"`
-	Revision    int64             `json:"revision"`
-	Version     int64             `json:"version"`
+	ID       string            `json:"id"`
+	Slug     string            `json:"slug"`
+	Name     string            `json:"name"`
+	Harness  string            `json:"harness"`
+	Model    string            `json:"model,omitempty"`
+	Settings map[string]string `json:"settings"`
+	// ClaudeSettings are the profile's Claude Code settings.json keys, a JSON object (SpaceMan 0.1.0-rc.9 or later;
+	// absent from older servers).
+	ClaudeSettings json.RawMessage `json:"claude_settings,omitempty"`
+	Description    string          `json:"description,omitempty"`
+	Revision       int64           `json:"revision"`
+	Version        int64           `json:"version"`
 }
 
 // ProfileInput is PUT /harness-profiles/{id|new}.
 type ProfileInput struct {
-	Slug        string            `json:"slug,omitempty"`
-	Name        string            `json:"name"`
-	Harness     string            `json:"harness,omitempty"`
-	Model       string            `json:"model,omitempty"`
-	Settings    map[string]string `json:"settings,omitempty"`
-	Description string            `json:"description,omitempty"`
+	Slug     string            `json:"slug,omitempty"`
+	Name     string            `json:"name"`
+	Harness  string            `json:"harness,omitempty"`
+	Model    string            `json:"model,omitempty"`
+	Settings map[string]string `json:"settings,omitempty"`
+	// ClaudeSettings nil keeps the stored settings; `{}` clears them.
+	ClaudeSettings json.RawMessage `json:"claude_settings,omitempty"`
+	Description    string          `json:"description,omitempty"`
 }
 
 // RoleTemplate is a role template.

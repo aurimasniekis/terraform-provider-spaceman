@@ -5,6 +5,12 @@ All notable changes to this provider are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- `spaceman_harness_profile.claude_settings`: Claude Code `settings.json` keys for the profile's runs, as a JSON object
+  (`jsonencode({...})`), any keys such as `permissions`, `autoMode`, `env` or `hooks` (SpaceMan ADR-0059). The
+  server's key order never causes a diff, and removing the attribute clears them. Needs SpaceMan 0.1.0-rc.9 or later; a
+  configuration without it works with older servers.
+
 ## [0.1.0-rc.8] - 2026-11-06
 
 Eighth release candidate, released with SpaceMan 0.1.0-rc.8: shared Git SSH keys.
