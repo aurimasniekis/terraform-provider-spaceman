@@ -5,6 +5,11 @@ All notable changes to this provider are documented here. The format is based on
 
 ## [Unreleased]
 
+### Fixed
+- `spaceman_space_role` and `spaceman_role_template`: a skill listed without `pin` failed on apply with "Provider
+  produced inconsistent result after apply … `.skills[0].pin`: was null, but now `""`". An omitted pin now stays null
+  (it follows the latest version); `pin = ""` still works and existing state plans no change.
+
 ## [0.1.0-rc.8] - 2026-11-06
 
 Eighth release candidate, released with SpaceMan 0.1.0-rc.8: shared Git SSH keys.
