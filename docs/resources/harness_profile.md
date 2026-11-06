@@ -53,7 +53,7 @@ resource "spaceman_harness_profile" "auto" {
 
 ### Optional
 
-- `claude_settings` (String) Claude Code `settings.json` keys for the profile's runs, as a JSON object (`jsonencode({...})`): any keys, such as `permissions`, `autoMode`, `env` or `hooks` (`claude-code` profiles only; SpaceMan 0.1.0-rc.9 or later, ADR-0059). SpaceMan sets them in each run's own `settings.json` at launch. `permissions.defaultMode` is held to central's permission mode ceiling. Hooks run commands on the node, and the settings are stored in clear, so keep secrets out. The server's key order never causes a diff. Removing the attribute clears the settings.
+- `claude_settings` (String) Claude Code `settings.json` keys for the profile's runs, as a JSON object (`jsonencode({...})`): any keys, such as `permissions`, `autoMode`, `env` or `hooks` (`claude-code` profiles only; SpaceMan 0.1.0-rc.9 or later, ADR-0059). SpaceMan sets them in each run's own `settings.json` at launch. `permissions.defaultMode` is held to central's permission mode ceiling. Hooks run commands on the node, and the settings are stored in clear, so keep secrets out. The server's key order never causes a diff. Removing the attribute or setting `jsonencode({})` clears the settings; SpaceMan stores both as no settings, so an import reads either as unset. A warning flags `env` keys that look like credential or endpoint overrides (`ANTHROPIC_*`, `CLAUDE_CODE_*`, `*_PROXY`).
 - `description` (String) Description.
 - `model` (String) Model.
 - `settings` (Map of String) Harness settings (string values).

@@ -120,3 +120,57 @@ func TestAccClaudeSettingsCodexRefused(t *testing.T) {
 		ExpectError: regexp.MustCompile(`only a\s+claude-code\s+profile`),
 	})
 }
+
+// TestAccClaudeSettingsEmptyObject covers `claude_settings = jsonencode({})`: SpaceMan stores no settings and returns
+// none, and the state keeps the configured `{}`, so the apply is consistent and a second plan is empty. SpaceMan cannot
+// tell `{}` from no settings, so an import reads the attribute as null, the same as leaving it out.
+func TestAccClaudeSettingsEmptyObject(t *testing.T) {
+	testAccPreCheck(t)
+	sfx := suffix()
+	empty := claudeProfileHCL(sfx, "claude-code", `claude_settings = jsonencode({})`)
+	accSteps(t,
+		resource.TestStep{
+			Config: empty,
+			Check:  resource.TestCheckResourceAttr("spaceman_harness_profile.c", "claude_settings", "{}"),
+		},
+		resource.TestStep{Config: empty, PlanOnly: true},
+		resource.TestStep{
+			ResourceName: "spaceman_harness_profile.c", ImportState: true, ImportStateVerify: true,
+			ImportStateVerifyIgnore: []string{"claude_settings"},
+			ImportStateCheck: func(s []*terraform.InstanceState) error {
+				if len(s) != 1 {
+					return fmt.Errorf("imported %d resources", len(s))
+				}
+				if v, ok := s[0].Attributes["claude_settings"]; ok {
+					return fmt.Errorf("imported claude_settings = %q, want null", v)
+				}
+				return nil
+			},
+		},
+		// From settings to `{}` clears them in SpaceMan and keeps `{}` in the state.
+		resource.TestStep{Config: claudeProfileHCL(sfx, "claude-code", `claude_settings = jsonencode({ model = "opus" })`)},
+		resource.TestStep{
+			Config: empty,
+			Check: resource.ComposeAggregateTestCheckFunc(
+				resource.TestCheckResourceAttr("spaceman_harness_profile.c", "claude_settings", "{}"),
+				func(s *terraform.State) error {
+					p, err := acc.client.GetProfile(context.Background(), stateAttr(s, "spaceman_harness_profile.c", "id"))
+					if err != nil {
+						return err
+					}
+					var m map[string]any
+					if len(p.ClaudeSettings) > 0 {
+						if err := json.Unmarshal(p.ClaudeSettings, &m); err != nil {
+							return err
+						}
+					}
+					if len(m) != 0 {
+						return fmt.Errorf("settings not cleared: %v", m)
+					}
+					return nil
+				},
+			),
+		},
+		resource.TestStep{Config: empty, PlanOnly: true},
+	)
+}
