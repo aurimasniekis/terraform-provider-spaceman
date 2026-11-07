@@ -10,8 +10,13 @@ All notable changes to this provider are documented here. The format is based on
   (`jsonencode({...})`), any keys such as `permissions`, `autoMode`, `env` or `hooks` (SpaceMan ADR-0059). The
   server's key order never causes a diff, and removing the attribute clears them. Needs SpaceMan 0.1.0-rc.9 or later; a
   configuration without it works with older servers.
+- `spaceman_harness_profile.claude_settings` warns (without failing) when an `env` key looks like a credential or
+  endpoint override: `ANTHROPIC_*`, `CLAUDE_CODE_*` or `*_PROXY`.
 
 ### Fixed
+- `spaceman_harness_profile.claude_settings = jsonencode({})` failed on apply with "Provider produced inconsistent result
+  after apply … `.claude_settings`: was `"{}"`, but now null". The state now keeps the configured `{}`, which clears the
+  settings in SpaceMan, and a second plan is empty. SpaceMan stores `{}` as no settings, so an import reads it as unset.
 - `spaceman_space_role` and `spaceman_role_template`: a skill listed without `pin` failed on apply with "Provider
   produced inconsistent result after apply … `.skills[0].pin`: was null, but now `""`". An omitted pin now stays null
   (it follows the latest version); `pin = ""` still works and existing state plans no change.

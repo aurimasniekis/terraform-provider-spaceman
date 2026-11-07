@@ -65,7 +65,7 @@ func (r *harnessProfileResource) toModel(p *client.Profile, m *harnessProfileMod
 	m.Harness = types.StringValue(p.Harness)
 	m.Model = types.StringValue(p.Model)
 	m.Settings = mapValue(p.Settings)
-	m.ClaudeSettings = claudeSettingsValue(p.ClaudeSettings)
+	m.ClaudeSettings = claudeSettingsValue(p.ClaudeSettings, m.ClaudeSettings)
 	m.Description = types.StringValue(p.Description)
 	m.Revision = types.Int64Value(p.Revision)
 }
