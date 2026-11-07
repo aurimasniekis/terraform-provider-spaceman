@@ -5,6 +5,21 @@ All notable changes to this provider are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- Event template filters can be optional (SpaceMan ADR-0061): `if_set` / `unless_set` name a variable, and the filter
+  applies only when that variable has a value (`if_set`) or has none (`unless_set`). They work in
+  `spaceman_event_template.definition` and `spaceman_event_subscription.custom`, together with the new `absent` op.
+  The definition validator now refuses an unknown `op` and an `if_set` / `unless_set` naming an undefined variable at
+  plan time. Needs SpaceMan 0.1.0-rc.9 or later; definitions without them work with older servers.
+- `data.spaceman_event_template.definition`: the latest version's definition as canonical JSON, so the variables and
+  filters of a built-in can be read with `jsondecode`. SpaceMan 0.1.0-rc.9 adds the built-ins `github-pr-comment`,
+  `github-issue-comment`, `github-pr-review`, `github-pr-review-comment`, `github-workflow-run` and
+  `github-check-suite`.
+
+### Fixed
+- A definition using `if_set` or `unless_set` was refused as "not a template definition: json: unknown field", so
+  custom definitions with optional filters couldn't be managed.
+
 ## [0.1.0-rc.9] - 2026-11-07
 
 Ninth release candidate, released with SpaceMan 0.1.0-rc.9: Claude Code settings on harness profiles.

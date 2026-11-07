@@ -431,12 +431,15 @@ type EventConnectionInput struct {
 	Enabled bool   `json:"enabled"`
 }
 
-// TemplateFilter is one filter of an event template definition.
+// TemplateFilter is one filter of an event template definition. IfSet and UnlessSet name a variable: the filter applies
+// only when that variable has a value (IfSet) or has none (UnlessSet) (SpaceMan ADR-0061).
 type TemplateFilter struct {
-	Path   string   `json:"path"`
-	Op     string   `json:"op"`
-	Value  string   `json:"value,omitempty"`
-	Values []string `json:"values,omitempty"`
+	Path      string   `json:"path"`
+	Op        string   `json:"op"`
+	Value     string   `json:"value,omitempty"`
+	Values    []string `json:"values,omitempty"`
+	IfSet     string   `json:"if_set,omitempty"`
+	UnlessSet string   `json:"unless_set,omitempty"`
 }
 
 // TemplateVariable is a subscription variable of a definition.

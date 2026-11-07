@@ -279,6 +279,7 @@ type eventTemplateDSModel struct {
 	LatestVersion   types.Int64  `tfsdk:"latest_version"`
 	LatestVersionID types.String `tfsdk:"latest_version_id"`
 	Subject         types.String `tfsdk:"subject"`
+	Definition      types.String `tfsdk:"definition"`
 }
 
 func (d *eventTemplateDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -295,6 +296,8 @@ func (d *eventTemplateDataSource) Schema(_ context.Context, _ datasource.SchemaR
 		"latest_version":    schema.Int64Attribute{Computed: true, MarkdownDescription: "Number of the latest published version."},
 		"latest_version_id": schema.StringAttribute{Computed: true, MarkdownDescription: "ID of the latest published version."},
 		"subject":           schema.StringAttribute{Computed: true, MarkdownDescription: "The latest version's subject filter (may contain `{{vars.x}}`)."},
+		"definition": schema.StringAttribute{Computed: true, MarkdownDescription: "The latest version's definition as canonical JSON " +
+			"(`jsondecode` it): its `variables`, and `filters` with `if_set` / `unless_set` (`\"\"` when there is no published version)."},
 	}}
 }
 
@@ -326,11 +329,17 @@ func (d *eventTemplateDataSource) Read(ctx context.Context, req datasource.ReadR
 		}
 	}
 	m.ID, m.Name, m.Builtin = types.StringValue(t.ID), types.StringValue(t.Name), types.BoolValue(t.Builtin)
-	m.LatestVersion, m.LatestVersionID, m.Subject = types.Int64Value(0), types.StringValue(""), types.StringValue("")
+	m.LatestVersion, m.LatestVersionID, m.Subject, m.Definition = types.Int64Value(0), types.StringValue(""), types.StringValue(""), types.StringValue("")
 	if lp := t.LatestPublished(); lp != nil {
 		m.LatestVersion, m.LatestVersionID = types.Int64Value(lp.Version), types.StringValue(lp.ID)
 		if lp.Definition != nil {
 			m.Subject = types.StringValue(lp.Definition.Subject)
+			def, err := marshalDefinition(lp.Definition)
+			if err != nil {
+				resp.Diagnostics.AddError("Could not encode the event template definition", err.Error())
+				return
+			}
+			m.Definition = types.StringValue(def)
 		}
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &m)...)
