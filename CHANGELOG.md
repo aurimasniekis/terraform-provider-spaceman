@@ -5,6 +5,10 @@ All notable changes to this provider are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.1.0-rc.9] - 2026-11-07
+
+Ninth release candidate, released with SpaceMan 0.1.0-rc.9: Claude Code settings on harness profiles.
+
 ### Added
 - `spaceman_harness_profile.claude_settings`: Claude Code `settings.json` keys for the profile's runs, as a JSON object
   (`jsonencode({...})`), any keys such as `permissions`, `autoMode`, `env` or `hooks` (SpaceMan ADR-0059). The
@@ -110,7 +114,8 @@ First release candidate (pre-release; not production-ready, see SpaceMan's docs/
 - `spaceman_human_action_policy`: `response_inbox` (`off`, `routed` or `always`), whether a response also becomes an
   inbox item (SpaceMan SM-INBOX-001, ADR-0049). Without the attribute, the provider's writes reset the policy to `off`.
 
-[Unreleased]: https://github.com/aurimasniekis/terraform-provider-spaceman/compare/v0.1.0-rc.8...HEAD
+[Unreleased]: https://github.com/aurimasniekis/terraform-provider-spaceman/compare/v0.1.0-rc.9...HEAD
+[0.1.0-rc.9]: https://github.com/aurimasniekis/terraform-provider-spaceman/releases/tag/v0.1.0-rc.9
 [0.1.0-rc.8]: https://github.com/aurimasniekis/terraform-provider-spaceman/releases/tag/v0.1.0-rc.8
 [0.1.0-rc.7]: https://github.com/aurimasniekis/terraform-provider-spaceman/releases/tag/v0.1.0-rc.7
 [0.1.0-rc.6]: https://github.com/aurimasniekis/terraform-provider-spaceman/releases/tag/v0.1.0-rc.6
