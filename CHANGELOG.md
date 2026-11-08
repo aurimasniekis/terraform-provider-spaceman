@@ -13,6 +13,9 @@ All notable changes to this provider are documented here. The format is based on
   Computed: `token_id`, `owner_user_id`, `expires_at`, `token_state`, `effective_tools` and `version`. It has no secret
   attributes: the server acts through a secretless internal token. A `grants` or expiry change re-issues the token in
   place (a new `token_id`, the old one revoked); every other change is an in-place edit, and destroy revokes the token.
+  An expiry drift (for example an out-of-band re-issue) is re-issued back to the configured expiry. Removing `grants`
+  from an existing server is refused at plan time unless its grants are already the default `admin` on `*`. Reading
+  the server needs `mcp:write` (SpaceMan's `check-mcp-server` lists its effective tools).
   The provider must use an API token issued by a user (not the root token). `spaceman_mcp_server` now refuses a
   SpaceMan MCP server (on refresh and import) and points to this resource, which likewise refuses external (http)
   servers. Needs the SpaceMan release that adds SpaceMan MCP servers.

@@ -2,6 +2,7 @@ package provider
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/sha1" //nolint:gosec // TOTP (RFC 6238) is defined over HMAC-SHA1
 	"encoding/base32"
@@ -21,6 +22,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 	"github.com/hashicorp/terraform-plugin-testing/tfjsonpath"
+
+	"github.com/aurimasniekis/terraform-provider-spaceman/internal/client"
 )
 
 // totpCode is the RFC 6238 code (SHA-1, 6 digits, 30 s) of a base32 secret at t.
@@ -269,10 +272,15 @@ func sameAttr(res, key string, want *string) resource.TestCheckFunc {
 // refusals, and destroy revoking the token.
 func TestAccAdminMCP(t *testing.T) {
 	testAccPreCheck(t)
-	t.Setenv(EnvToken, adminMCPUserToken(t)) // the provider under test acts as that user (read at configure time)
+	secret := adminMCPUserToken(t)
+	t.Setenv(EnvToken, secret) // the provider under test acts as that user (read at configure time)
+	uc, err := client.New(acc.endpoint, secret, client.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	sfx, spaceSlug := suffix(), "tf-amcp-"+suffix()
 	slug := "tfa" + sfx
-	var tok1, tok2 string
+	var tok1, tok2, serverID string
 	cfg := func(preset, role, extra string) string {
 		return adminMCPHCL(sfx, spaceSlug, acc.nodeA.ID, slug, preset, role, extra)
 	}
@@ -347,8 +355,30 @@ func TestAccAdminMCP(t *testing.T) {
 			ImportStateVerifyIgnore: []string{"expires_in_days"}},
 		// Back to a token that never expires, then import with nothing ignored.
 		resource.TestStep{Config: cfg("operate", "operator", ""),
-			Check: recordAttr("spaceman_admin_mcp_server.a", "token_id", &tok2)},
+			Check: resource.ComposeAggregateTestCheckFunc(
+				recordAttr("spaceman_admin_mcp_server.a", "token_id", &tok2),
+				recordAttr("spaceman_admin_mcp_server.a", "id", &serverID),
+			)},
 		resource.TestStep{ResourceName: "spaceman_admin_mcp_server.a", ImportState: true, ImportStateVerify: true},
+		// Drift of the expiry kind alone: an out-of-band re-issue gives the never-expiring token 30 days. The same
+		// configuration re-issues it back to never (expires_in_days is null in both the state and the plan).
+		resource.TestStep{
+			PreConfig: func() { adminMCPReissue(t, uc, serverID, 30) },
+			Config:    cfg("operate", "operator", ""),
+			ConfigPlanChecks: resource.ConfigPlanChecks{
+				PreApply: []plancheck.PlanCheck{
+					plancheck.ExpectResourceAction("spaceman_admin_mcp_server.a", plancheck.ResourceActionUpdate),
+					plancheck.ExpectUnknownValue("spaceman_admin_mcp_server.a", tfjsonpath.New("token_id")),
+					plancheck.ExpectKnownValue("spaceman_admin_mcp_server.a", tfjsonpath.New("never_expires"), knownvalue.Bool(true)),
+				},
+				PostApplyPostRefresh: []plancheck.PlanCheck{plancheck.ExpectEmptyPlan()},
+			},
+			Check: resource.ComposeAggregateTestCheckFunc(
+				resource.TestCheckResourceAttr("spaceman_admin_mcp_server.a", "never_expires", "true"),
+				resource.TestCheckResourceAttr("spaceman_admin_mcp_server.a", "expires_at", ""),
+				resource.TestCheckResourceAttr("spaceman_admin_mcp_server.a", "token_state", "active"),
+			),
+		},
 		// Cross-kind guards: each resource refuses the other kind.
 		resource.TestStep{ResourceName: "spaceman_admin_mcp_server.a", ImportState: true,
 			ImportStateIdFunc: func(s *terraform.State) (string, error) { return stateAttr(s, "spaceman_mcp_server.m", "id"), nil },
@@ -358,5 +388,78 @@ func TestAccAdminMCP(t *testing.T) {
 				return stateAttr(s, "spaceman_admin_mcp_server.a", "id"), nil
 			},
 			ExpectError: regexp.MustCompile(`manage it with spaceman_admin_mcp_server`)},
+	)
+}
+
+// adminMCPReissue re-issues a SpaceMan MCP server's token outside Terraform (as the provider's user), keeping its grants
+// and giving it days of lifetime.
+func adminMCPReissue(t *testing.T, c *client.Client, id string, days int64) {
+	t.Helper()
+	ctx := context.Background()
+	s, err := c.GetSpacemanMCPServer(ctx, id)
+	if err != nil {
+		t.Fatalf("get MCP server: %v", err)
+	}
+	if _, err := c.ReissueSpacemanMCPServer(ctx, id, s.Version, client.SpacemanMCPToken{Grants: s.Spaceman.Grants, ExpiresInDays: days}); err != nil {
+		t.Fatalf("re-issue MCP server: %v", err)
+	}
+}
+
+// TestAccAdminMCPImportExpiring imports a server whose token expires into a configuration that leaves expires_in_days
+// (and grants, which are SpaceMan's default admin on *) out: the apply re-issues the token to never expire, and the plan is
+// then empty. It also covers removing grants from an existing server, which is refused at plan time.
+func TestAccAdminMCPImportExpiring(t *testing.T) {
+	testAccPreCheck(t)
+	secret := adminMCPUserToken(t)
+	t.Setenv(EnvToken, secret)
+	uc, err := client.New(acc.endpoint, secret, client.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	slug := "tfi" + suffix()
+	s, err := uc.CreateSpacemanMCPServer(context.Background(), client.SpacemanMCPInput{Slug: slug, Name: "Imported", Preset: "admin", ExpiresInDays: 30})
+	if err != nil {
+		t.Fatalf("create MCP server: %v", err)
+	}
+	t.Cleanup(func() { _ = acc.client.DeleteMCPServer(context.Background(), s.ID) }) // when the import never happened
+	if s.Spaceman == nil || s.Spaceman.NeverExpires {
+		t.Fatal("the server's token should expire")
+	}
+	oldToken := s.Spaceman.TokenID
+	base := fmt.Sprintf(`
+resource "spaceman_admin_mcp_server" "a" {
+  slug = %q
+  name = "Imported"
+  %%s
+}
+`, slug)
+	viewer := `grants = [{ role = "viewer", domain = "*" }]`
+	accCase(t, nil,
+		resource.TestStep{
+			Config: fmt.Sprintf("import {\n  to = spaceman_admin_mcp_server.a\n  id = %q\n}\n", s.ID) + fmt.Sprintf(base, ""),
+			ConfigPlanChecks: resource.ConfigPlanChecks{
+				PreApply: []plancheck.PlanCheck{
+					plancheck.ExpectResourceAction("spaceman_admin_mcp_server.a", plancheck.ResourceActionUpdate),
+					plancheck.ExpectUnknownValue("spaceman_admin_mcp_server.a", tfjsonpath.New("token_id")),
+				},
+				PostApplyPostRefresh: []plancheck.PlanCheck{plancheck.ExpectEmptyPlan()},
+			},
+			Check: resource.ComposeAggregateTestCheckFunc(
+				resource.TestCheckResourceAttr("spaceman_admin_mcp_server.a", "never_expires", "true"),
+				resource.TestCheckResourceAttr("spaceman_admin_mcp_server.a", "expires_at", ""),
+				resource.TestCheckResourceAttr("spaceman_admin_mcp_server.a", "grants.#", "1"),
+				resource.TestCheckResourceAttr("spaceman_admin_mcp_server.a", "grants.0.role", "admin"),
+				resource.TestCheckResourceAttr("spaceman_admin_mcp_server.a", "grants.0.domain", "*"),
+				checkTokenRevoked(t, &oldToken),
+			),
+		},
+		// Narrower grants, then removing them: refused (never widened back to admin on *, never silently kept).
+		resource.TestStep{Config: fmt.Sprintf(base, viewer),
+			Check: resource.TestCheckResourceAttr("spaceman_admin_mcp_server.a", "grants.0.role", "viewer")},
+		resource.TestStep{Config: fmt.Sprintf(base, ""),
+			ExpectError: regexp.MustCompile(`grants can't be removed from an existing server; set them explicitly`)},
+		resource.TestStep{Config: fmt.Sprintf(base, viewer),
+			ConfigPlanChecks: resource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{plancheck.ExpectEmptyPlan()}},
+			Check:            resource.TestCheckResourceAttr("spaceman_admin_mcp_server.a", "grants.0.role", "viewer")},
 	)
 }

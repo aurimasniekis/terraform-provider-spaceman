@@ -11,6 +11,8 @@ A SpaceMan MCP server (`POST /mcp-servers/spaceman`): SpaceMan's own API offered
 
 The provider must use an API token issued by a user (not the root token, and not a token issued by another token): SpaceMan refuses otherwise. Changing `grants` or the expiry re-issues the internal token in place (SpaceMan revokes the old one and mints a new `token_id` in one step); every other change is an in-place edit. Deleting the server revokes its token and removes its grants. Dangerous tools (deletes, secrets, profile hooks and the like) always need a person's approval in SpaceMan, whatever `approval` says. Use `spaceman_mcp_server` for external (http) MCP servers; each resource refuses the other kind.
 
+Reading the server (every refresh and plan) lists its effective tools through SpaceMan's `check-mcp-server`, which needs `mcp:write`: the provider's token needs that permission (for example `admin` on `*`) even to plan.
+
 ## Example Usage
 
 ```terraform
@@ -57,7 +59,7 @@ output "admin_mcp_tools" {
 - `description` (String) Description.
 - `enabled` (Boolean) Whether the gateway offers the server's tools (default `true`).
 - `expires_in_days` (Number) Lifetime of the internal token in days (1-366), counted from when it is minted. Left out, the token never expires (the default). Changing it re-issues the token; change it again (or re-apply with a new value) to renew an expired one.
-- `grants` (Attributes Set) The internal token's role grants, each covered by the provider user's own. Left out, SpaceMan grants `admin` on `*` (only with the `admin` preset; other presets need grants). Changing them re-issues the token (new `token_id`). (see [below for nested schema](#nestedatt--grants))
+- `grants` (Attributes Set) The internal token's role grants, each covered by the provider user's own. Left out at create, SpaceMan grants `admin` on `*` (only with the `admin` preset; other presets need grants). Changing them re-issues the token (new `token_id`). Removing them from an existing server is refused at plan time (it would neither widen the token to `admin` on `*` nor silently keep the old grants): set them explicitly. A server whose grants are already exactly `admin` on `*` may leave them out. (see [below for nested schema](#nestedatt--grants))
 - `max_concurrency` (Number) Calls in flight to this server across all runs, 1-32 (server default when left out).
 - `max_result_bytes` (Number) Largest tool result passed to an agent, 1 KiB-4 MiB (server default when left out).
 - `never_expires` (Boolean) Whether the internal token never expires: `true` exactly when `expires_in_days` is left out (setting it is optional and only documents the choice).

@@ -74,7 +74,9 @@ func (r *adminMCPServerResource) Schema(_ context.Context, _ resource.SchemaRequ
 			"otherwise. Changing `grants` or the expiry re-issues the internal token in place (SpaceMan revokes the old one and mints a new " +
 			"`token_id` in one step); every other change is an in-place edit. Deleting the server revokes its token and removes its grants. " +
 			"Dangerous tools (deletes, secrets, profile hooks and the like) always need a person's approval in SpaceMan, whatever `approval` says. " +
-			"Use `spaceman_mcp_server` for external (http) MCP servers; each resource refuses the other kind.",
+			"Use `spaceman_mcp_server` for external (http) MCP servers; each resource refuses the other kind.\n\n" +
+			"Reading the server (every refresh and plan) lists its effective tools through SpaceMan's `check-mcp-server`, which needs " +
+			"`mcp:write`: the provider's token needs that permission (for example `admin` on `*`) even to plan.",
 		Attributes: map[string]schema.Attribute{
 			"id": idAttr("The server ID."),
 			"slug": schema.StringAttribute{Required: true,
@@ -88,8 +90,11 @@ func (r *adminMCPServerResource) Schema(_ context.Context, _ resource.SchemaRequ
 			"name":        schema.StringAttribute{Required: true, MarkdownDescription: "Display name (also the internal token's name)."},
 			"description": optString("Description."),
 			"grants": schema.SetNestedAttribute{Optional: true, Computed: true,
-				MarkdownDescription: "The internal token's role grants, each covered by the provider user's own. Left out, SpaceMan grants `admin` on `*` " +
-					"(only with the `admin` preset; other presets need grants). Changing them re-issues the token (new `token_id`).",
+				MarkdownDescription: "The internal token's role grants, each covered by the provider user's own. Left out at create, SpaceMan grants `admin` " +
+					"on `*` (only with the `admin` preset; other presets need grants). Changing them re-issues the token (new `token_id`). " +
+					"Removing them from an existing server is refused at plan time (it would neither widen the token to `admin` on `*` nor " +
+					"silently keep the old grants): set them explicitly. A server whose grants are already exactly `admin` on `*` may " +
+					"leave them out.",
 				NestedObject: schema.NestedAttributeObject{Attributes: map[string]schema.Attribute{
 					"role": schema.StringAttribute{Required: true, MarkdownDescription: "`viewer`, `operator` or `admin`.",
 						Validators: []validator.String{stringvalidator.OneOf("viewer", "operator", "admin")}},
@@ -158,6 +163,11 @@ func (r *adminMCPServerResource) reissues(plan, prior *adminMCPServerModel) bool
 	if !plan.Grants.IsUnknown() && !plan.Grants.Equal(prior.Grants) {
 		return true
 	}
+	// The token's expiry kind differs from the configuration (an out-of-band re-issue, or an imported expiring server
+	// configured without expires_in_days): re-issue it as configured.
+	if !plan.NeverExpires.IsUnknown() && !plan.NeverExpires.Equal(prior.NeverExpires) {
+		return true
+	}
 	if plan.ExpiresInDays.Equal(prior.ExpiresInDays) {
 		return false
 	}
@@ -187,18 +197,41 @@ func (r *adminMCPServerResource) ModifyPlan(ctx context.Context, req resource.Mo
 		if resp.Diagnostics.HasError() {
 			return
 		}
+		// Removing grants must never widen the token to SpaceMan's create default (admin on *), and silently keeping
+		// the old ones would hide the change: refuse it unless the server already has exactly the default.
+		var cfgGrants types.Set
+		resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("grants"), &cfgGrants)...)
+		if cfgGrants.IsNull() && !prior.Grants.IsNull() && !prior.Grants.IsUnknown() && !prior.Grants.Equal(adminMCPDefaultGrants()) {
+			resp.Diagnostics.AddAttributeError(path.Root("grants"), "Grants cannot be removed",
+				"grants can't be removed from an existing server; set them explicitly (the server's token has other grants than "+
+					"the create default, admin on *).")
+		}
+		if resp.Diagnostics.HasError() {
+			return
+		}
 		reissue := r.reissues(&plan, &prior)
-		if !reissue {
+		switch {
+		case reissue:
+			// Set them unknown explicitly: when only the token's expiry kind drifted, the configuration equals the
+			// state and Terraform would otherwise plan the old values.
+			plan.TokenID, plan.OwnerUserID, plan.ExpiresAt, plan.TokenState = types.StringUnknown(), types.StringUnknown(), types.StringUnknown(), types.StringUnknown()
+			plan.EffectiveTools, plan.Version = types.SetUnknown(types.StringType), types.Int64Unknown()
+		default:
 			plan.TokenID, plan.OwnerUserID, plan.ExpiresAt, plan.TokenState = prior.TokenID, prior.OwnerUserID, prior.ExpiresAt, prior.TokenState
-		}
-		if !reissue && plan.Preset.Equal(prior.Preset) && plan.Tools.Equal(prior.Tools) {
-			plan.EffectiveTools = prior.EffectiveTools
-		}
-		if adminMCPUnchanged(&plan, &prior) {
-			plan.Version = prior.Version
+			if plan.Preset.Equal(prior.Preset) && plan.Tools.Equal(prior.Tools) {
+				plan.EffectiveTools = prior.EffectiveTools
+			}
+			if adminMCPUnchanged(&plan, &prior) {
+				plan.Version = prior.Version
+			}
 		}
 	}
 	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
+}
+
+// adminMCPDefaultGrants is SpaceMan's grant for a server created without grants (admin preset only): admin on *.
+func adminMCPDefaultGrants() types.Set {
+	return grantsValue([]client.GrantInput{{Role: "admin", Domain: "*"}})
 }
 
 // adminMCPUnchanged reports whether the plan sends nothing: every configurable attribute equals the state.
@@ -256,8 +289,12 @@ func (r *adminMCPServerResource) read(ctx context.Context, id string, m *adminMC
 		return true
 	}
 	if s.Kind != client.MCPKindSpaceman {
+		kind := "an external (" + s.Kind + ")"
+		if s.Kind == "" {
+			kind = "an older or external"
+		}
 		d.AddError("Not a SpaceMan MCP server",
-			"MCP server "+id+" ("+s.Slug+") is an external ("+s.Kind+") server: manage it with spaceman_mcp_server, not spaceman_admin_mcp_server.")
+			"MCP server "+id+" ("+s.Slug+") is "+kind+" server: manage it with spaceman_mcp_server, not spaceman_admin_mcp_server.")
 		return true
 	}
 	chk, err := r.c.CheckMCPServer(ctx, id)
