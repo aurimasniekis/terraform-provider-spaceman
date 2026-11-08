@@ -101,7 +101,7 @@ func filtersOf(s *terraform.State, res, attr string) ([]client.TemplateFilter, e
 	return d.Filters, nil
 }
 
-// TestAccEventTemplateOptionalFilters (SpaceMan ADR-0061, needs SpaceMan 0.1.0-rc.9 or later): if_set, unless_set and
+// TestAccEventTemplateOptionalFilters (SpaceMan ADR-0061): if_set, unless_set and
 // the absent op round-trip through a template, a custom subscription and the data source of a built-in.
 func TestAccEventTemplateOptionalFilters(t *testing.T) {
 	testAccPreCheck(t)

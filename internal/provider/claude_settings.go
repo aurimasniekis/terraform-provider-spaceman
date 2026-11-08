@@ -16,7 +16,7 @@ import (
 func claudeSettingsAttr() schema.StringAttribute {
 	return schema.StringAttribute{Optional: true, CustomType: jsontypes.NormalizedType{}, Validators: []validator.String{jsonObjectValidator{}},
 		MarkdownDescription: "Claude Code `settings.json` keys for the profile's runs, as a JSON object (`jsonencode({...})`): any keys, such as " +
-			"`permissions`, `autoMode`, `env` or `hooks` (`claude-code` profiles only; SpaceMan 0.1.0-rc.9 or later, ADR-0059). SpaceMan sets them in " +
+			"`permissions`, `autoMode`, `env` or `hooks` (`claude-code` profiles only; ADR-0059). SpaceMan sets them in " +
 			"each run's own `settings.json` at launch. `permissions.defaultMode` is held to central's permission mode ceiling. Hooks run commands on " +
 			"the node, and the settings are stored in clear, so keep secrets out. The server's key order never causes a diff. Removing the attribute " +
 			"or setting `jsonencode({})` clears the settings; SpaceMan stores both as no settings, so an import reads either as unset. A warning " +

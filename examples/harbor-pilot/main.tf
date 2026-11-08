@@ -13,7 +13,8 @@
 # plans of it off CI, or revoke the unused spaceman-parent tokens in Harbor Pilot. A shorter ttl_seconds, rotated by
 # bumping harbor_pilot_tokens_version, limits how long the unused ones stay valid.
 #
-# Needs SpaceMan with the Harbor Pilot gateway (ADR-0060), Harbor Pilot 0.1.3 or later and its provider 0.1.1 or later.
+# Needs SpaceMan 0.1.0 or later (the Harbor Pilot gateway, ADR-0060), Harbor Pilot 0.1.3 or later and its
+# provider 0.1.1 or later.
 #
 #   export SPACEMAN_ENDPOINT=https://spaceman.example.com SPACEMAN_TOKEN=…  # account:write (the connection, projects)
 #   export HP_SERVER=https://harbor-pilot.example.com HP_API_TOKEN=…        # a Harbor Pilot admin API token

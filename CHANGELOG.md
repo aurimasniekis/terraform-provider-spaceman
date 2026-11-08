@@ -5,6 +5,11 @@ All notable changes to this provider are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-08
+
+Final 0.1.0 release, released with SpaceMan 0.1.0: SpaceMan MCP servers, the Harbor Pilot gateway and optional event
+template filters. It requires SpaceMan 0.1.0 or later and Terraform 1.11 or later.
+
 ### Added
 - `spaceman_admin_mcp_server`: a SpaceMan MCP server (SpaceMan ADR-0063), SpaceMan's own API offered as MCP tools to a
   space's control and worker runs, granted with the existing `spaceman_mcp_grant`. Inputs: `slug` (replaces; `spaceman`
@@ -18,9 +23,8 @@ All notable changes to this provider are documented here. The format is based on
   the server needs `mcp:write` (SpaceMan's `check-mcp-server` lists its effective tools).
   The provider must use an API token issued by a user (not the root token). `spaceman_mcp_server` now refuses a
   SpaceMan MCP server (on refresh and import) and points to this resource, which likewise refuses external (http)
-  servers. Needs the SpaceMan release that adds SpaceMan MCP servers.
-- Harbor Pilot gateway (SpaceMan ADR-0060). Needs the SpaceMan release that adds the Harbor Pilot gateway (after
-  0.1.0-rc.9); configurations without these resources work with older servers.
+  servers.
+- Harbor Pilot gateway (SpaceMan ADR-0060).
   - `spaceman_harbor_pilot_connection`: central's connection to a Harbor Pilot gateway (0.1.3 or later), a singleton
     imported with the ID `harbor-pilot`. The parent token (`tokens:mint`) and the optional service-principal token are
     write-only (`parent_token_wo` / `service_token_wo` with `*_wo_version`): they never reach a plan or the state, and
@@ -38,9 +42,9 @@ All notable changes to this provider are documented here. The format is based on
   applies only when that variable has a value (`if_set`) or has none (`unless_set`). They work in
   `spaceman_event_template.definition` and `spaceman_event_subscription.custom`, together with the new `absent` op.
   The definition validator now refuses an unknown `op` and an `if_set` / `unless_set` naming an undefined variable at
-  plan time. Needs SpaceMan 0.1.0-rc.9 or later; definitions without them work with older servers.
+  plan time.
 - `data.spaceman_event_template.definition`: the latest version's definition as canonical JSON, so the variables and
-  filters of a built-in can be read with `jsondecode`. SpaceMan 0.1.0-rc.9 adds the built-ins `github-pr-comment`,
+  filters of a built-in can be read with `jsondecode`. SpaceMan 0.1.0 has the built-ins `github-pr-comment`,
   `github-issue-comment`, `github-pr-review`, `github-pr-review-comment`, `github-workflow-run` and
   `github-check-suite`.
 
@@ -157,7 +161,8 @@ First release candidate (pre-release; not production-ready, see SpaceMan's docs/
 - `spaceman_human_action_policy`: `response_inbox` (`off`, `routed` or `always`), whether a response also becomes an
   inbox item (SpaceMan SM-INBOX-001, ADR-0049). Without the attribute, the provider's writes reset the policy to `off`.
 
-[Unreleased]: https://github.com/aurimasniekis/terraform-provider-spaceman/compare/v0.1.0-rc.9...HEAD
+[Unreleased]: https://github.com/aurimasniekis/terraform-provider-spaceman/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/aurimasniekis/terraform-provider-spaceman/releases/tag/v0.1.0
 [0.1.0-rc.9]: https://github.com/aurimasniekis/terraform-provider-spaceman/releases/tag/v0.1.0-rc.9
 [0.1.0-rc.8]: https://github.com/aurimasniekis/terraform-provider-spaceman/releases/tag/v0.1.0-rc.8
 [0.1.0-rc.7]: https://github.com/aurimasniekis/terraform-provider-spaceman/releases/tag/v0.1.0-rc.7

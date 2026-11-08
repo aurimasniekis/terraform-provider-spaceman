@@ -161,8 +161,8 @@ type Profile struct {
 	Harness  string            `json:"harness"`
 	Model    string            `json:"model,omitempty"`
 	Settings map[string]string `json:"settings"`
-	// ClaudeSettings are the profile's Claude Code settings.json keys, a JSON object (SpaceMan 0.1.0-rc.9 or later;
-	// absent from older servers).
+	// ClaudeSettings are the profile's Claude Code settings.json keys, a JSON object (omitted when
+	// the profile has none).
 	ClaudeSettings json.RawMessage `json:"claude_settings,omitempty"`
 	Description    string          `json:"description,omitempty"`
 	Revision       int64           `json:"revision"`
