@@ -17,8 +17,8 @@ import (
 type hpConfig struct {
 	parent     string
 	parentVer  int
-	service    string // empty: no service token (and no version)
-	serviceVer int
+	service    string // empty: no service token
+	serviceVer int    // 0: no service_token_wo_version
 	space      string // the space's settings block body
 	spaceSlug  string
 	nodeID     string
@@ -42,7 +42,10 @@ resource "spaceman_harbor_pilot_connection" "hp" {
   parent_token_wo_version = %d
 `, c.spaceSlug, c.nodeID, c.gatewayURL, c.parent, c.parentVer)
 	if c.service != "" {
-		fmt.Fprintf(&b, "  service_token_wo         = %q\n  service_token_wo_version = %d\n", c.service, c.serviceVer)
+		fmt.Fprintf(&b, "  service_token_wo         = %q\n", c.service)
+	}
+	if c.serviceVer != 0 {
+		fmt.Fprintf(&b, "  service_token_wo_version = %d\n", c.serviceVer)
 	}
 	fmt.Fprintf(&b, `}
 
@@ -125,10 +128,16 @@ func TestAccHarborPilot(t *testing.T) {
   on_budget_status_unavailable = "refuse"
   allowed_model_aliases        = ["claude-sonnet-4-5"]
 `, g.AltProjectID)
+	localhost := strings.Replace(g.URL, "127.0.0.1", "localhost", 1)
+	movedService := changed // a move that sends the configured service token again keeps it
+	movedService.gatewayURL = localhost
+	movedBack := movedService // a move without the service token, while SpaceMan holds one: refused
+	movedBack.gatewayURL = g.URL
+	movedBack.service = ""
 	noService := changed
-	noService.service = ""
+	noService.service, noService.serviceVer = "", 0
 	moved := noService
-	moved.gatewayURL = strings.Replace(g.URL, "127.0.0.1", "localhost", 1)
+	moved.gatewayURL = localhost
 
 	accSteps(t,
 		resource.TestStep{
@@ -191,13 +200,46 @@ func TestAccHarborPilot(t *testing.T) {
 		resource.TestStep{ResourceName: "spaceman_space_harbor_pilot.s", ImportState: true, ImportStateVerify: true},
 		resource.TestStep{ResourceName: "spaceman_harbor_pilot_connection.hp", ImportState: true, ImportStateId: "hpc_other",
 			ExpectError: regexp.MustCompile(`singleton`)},
-		// Leaving out the service token (and its version) removes it from SpaceMan.
+		// A new gateway address (the same gateway as localhost) sends both configured tokens again with the same versions:
+		// SpaceMan sends stored tokens only to the address they were entered for, and the service token is kept.
+		resource.TestStep{
+			Config: movedService.hcl(),
+			ConfigPlanChecks: resource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
+				plancheck.ExpectResourceAction("spaceman_harbor_pilot_connection.hp", plancheck.ResourceActionUpdate),
+				noTokensInPlan{[]string{p1, p2, sp}}}},
+			Check: resource.ComposeAggregateTestCheckFunc(
+				resource.TestCheckResourceAttr("spaceman_harbor_pilot_connection.hp", "base_url", localhost),
+				resource.TestCheckResourceAttr("spaceman_harbor_pilot_connection.hp", "has_parent_token", "true"),
+				resource.TestCheckResourceAttr("spaceman_harbor_pilot_connection.hp", "parent_token_version", "3"),
+				resource.TestCheckResourceAttr("spaceman_harbor_pilot_connection.hp", "has_service_token", "true"),
+				resource.TestCheckResourceAttr("spaceman_harbor_pilot_connection.hp", "service_token_version", "2"),
+				noLeak,
+			),
+		},
+		resource.TestStep{Config: movedService.hcl(), PlanOnly: true},
+		// Moving with the service token left out but its version unchanged doesn't remove it: SpaceMan refuses the move,
+		// the error says how to go on, and nothing changes (the next plan of the previous configuration is empty).
+		resource.TestStep{
+			Config:      movedBack.hcl(),
+			ExpectError: regexp.MustCompile(`(?s)add service_token_wo, or bump\s+service_token_wo_version to remove it`),
+		},
+		resource.TestStep{Config: movedService.hcl(), PlanOnly: true},
+		resource.TestStep{
+			Config: movedService.hcl(),
+			Check: resource.ComposeAggregateTestCheckFunc(
+				resource.TestCheckResourceAttr("spaceman_harbor_pilot_connection.hp", "base_url", localhost),
+				resource.TestCheckResourceAttr("spaceman_harbor_pilot_connection.hp", "parent_token_version", "3"),
+				resource.TestCheckResourceAttr("spaceman_harbor_pilot_connection.hp", "has_service_token", "true"),
+				resource.TestCheckResourceAttr("spaceman_harbor_pilot_connection.hp", "service_token_version", "2"),
+			),
+		},
+		// Leaving out the service token and its version removes it from SpaceMan (the address moves back too).
 		resource.TestStep{
 			Config:           noService.hcl(),
 			ConfigPlanChecks: planNoLeak,
 			Check: resource.ComposeAggregateTestCheckFunc(
 				resource.TestCheckResourceAttr("spaceman_harbor_pilot_connection.hp", "has_service_token", "false"),
-				resource.TestCheckResourceAttr("spaceman_harbor_pilot_connection.hp", "service_token_version", "2"),
+				resource.TestCheckResourceAttr("spaceman_harbor_pilot_connection.hp", "service_token_version", "3"),
 				resource.TestCheckResourceAttr("spaceman_harbor_pilot_connection.hp", "has_parent_token", "true"),
 				noLeak,
 			),
@@ -212,7 +254,7 @@ func TestAccHarborPilot(t *testing.T) {
 				noTokensInPlan{[]string{p1, p2, sp}}}},
 			Check: resource.ComposeAggregateTestCheckFunc(
 				resource.TestCheckResourceAttr("spaceman_harbor_pilot_connection.hp", "base_url", moved.gatewayURL),
-				resource.TestCheckResourceAttr("spaceman_harbor_pilot_connection.hp", "parent_token_version", "3"),
+				resource.TestCheckResourceAttr("spaceman_harbor_pilot_connection.hp", "parent_token_version", "5"),
 				resource.TestCheckResourceAttr("spaceman_harbor_pilot_connection.hp", "has_service_token", "false"),
 				noLeak,
 			),

@@ -6,13 +6,14 @@ All notable changes to this provider are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
-- Harbor Pilot gateway (SpaceMan ADR-0060). Needs SpaceMan 0.1.0-rc.10 or later, the first release with the gateway;
-  configurations without these resources work with older servers.
+- Harbor Pilot gateway (SpaceMan ADR-0060). Needs the SpaceMan release that adds the Harbor Pilot gateway (after
+  0.1.0-rc.9); configurations without these resources work with older servers.
   - `spaceman_harbor_pilot_connection`: central's connection to a Harbor Pilot gateway (0.1.3 or later), a singleton
     imported with the ID `harbor-pilot`. The parent token (`tokens:mint`) and the optional service-principal token are
     write-only (`parent_token_wo` / `service_token_wo` with `*_wo_version`): they never reach a plan or the state, and
     fit Harbor Pilot's ephemeral token resources. A changed `base_url`, `run_base_url` or newly allowed plain http sends
-    the tokens again, as SpaceMan requires. Updates and deletes send `If-Match`.
+    the tokens again, as SpaceMan requires; the stored service token is removed only by a `service_token_wo_version`
+    change, never by a move alone. Updates and deletes send `If-Match`.
   - `spaceman_space_harbor_pilot`: a space's opt-in, with `enabled`, `project_id`, `harnesses`, `ttl_seconds`,
     `on_budget_status_unavailable` and `allowed_model_aliases`, imported by space ID. Setting or changing `project_id`
     needs `account:write` in SpaceMan.

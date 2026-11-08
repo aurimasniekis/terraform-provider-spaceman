@@ -9,6 +9,9 @@
 # reach SpaceMan through write-only arguments. Terraform opens ephemeral resources on every plan and apply, so each run
 # issues new tokens, but SpaceMan only receives them when a *_wo_version changes (bump it to rotate, before ttl_seconds
 # runs out). With revoke_on_close = false the unused ones stay valid until they expire.
+# So every plan of this configuration mints a new 30-day spaceman-parent token and a new service-principal token: keep
+# plans of it off CI, or revoke the unused spaceman-parent tokens in Harbor Pilot. A shorter ttl_seconds, rotated by
+# bumping harbor_pilot_tokens_version, limits how long the unused ones stay valid.
 #
 # Needs SpaceMan with the Harbor Pilot gateway (ADR-0060), Harbor Pilot 0.1.3 or later and its provider 0.1.1 or later.
 #

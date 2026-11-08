@@ -100,6 +100,7 @@ func startHarborPilot(t *testing.T) *hpGateway {
 	}
 	cmd := exec.Command(bin, "serve", "--demo", "--listen", addr, "--data-dir", filepath.Join(dir, "data")) //nolint:gosec // test binary
 	cmd.Env = cleanEnv()
+	setGatewayProcAttr(cmd)
 	cmd.Stdout, cmd.Stderr = logf, logf
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)

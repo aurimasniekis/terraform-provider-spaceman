@@ -2,7 +2,9 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -85,7 +87,9 @@ func (r *harborPilotConnectionResource) Schema(_ context.Context, _ resource.Sch
 			"service_token_wo": schema.StringAttribute{Optional: true, WriteOnly: true, Sensitive: true,
 				MarkdownDescription: "A Harbor Pilot service-principal token (`hpa_…`) with `usage.read` and `config.read` (write-only), for " +
 					"budget status and project checks. Sent on create, whenever `service_token_wo_version` changes and whenever the gateway " +
-					"address changes; left out at those times, the stored service token is removed."},
+					"address changes. Removed only when `service_token_wo_version` changes with no `service_token_wo` configured: an address " +
+					"change without it, while SpaceMan holds a service token, fails (add `service_token_wo`, or change " +
+					"`service_token_wo_version` to remove the token)."},
 			"service_token_wo_version": woVersion("service_token_wo"),
 			"binding_id":               schema.StringAttribute{Computed: true, MarkdownDescription: "The parent token's Harbor Pilot client binding, learnt when SpaceMan validated the connection."},
 			"has_parent_token":         schema.BoolAttribute{Computed: true, MarkdownDescription: "Whether SpaceMan holds a parent token."},
@@ -231,9 +235,12 @@ func (r *harborPilotConnectionResource) Update(ctx context.Context, req resource
 	if moved || !m.ParentTokenWOVersion.Equal(prior.ParentTokenWOVersion) {
 		in.ParentToken = parent
 	}
-	if moved || !m.ServiceTokenWOVersion.Equal(prior.ServiceTokenWOVersion) {
+	serviceBumped := !m.ServiceTokenWOVersion.Equal(prior.ServiceTokenWOVersion)
+	if moved || serviceBumped {
 		in.ServiceToken = service
-		in.RemoveServiceToken = service == "" && prior.HasServiceToken.ValueBool()
+		// Removal is tied to a version change: a move alone never removes the stored service token. Without one
+		// configured, SpaceMan refuses the move, and the error says how to go on.
+		in.RemoveServiceToken = serviceBumped && service == "" && prior.HasServiceToken.ValueBool()
 	}
 	v := getVersion(ctx, req.Private, &resp.Diagnostics)
 	if v == 0 {
@@ -246,6 +253,11 @@ func (r *harborPilotConnectionResource) Update(ctx context.Context, req resource
 	}
 	c, err := r.c.PutHarborPilotConnection(ctx, v, in)
 	if err != nil {
+		var ae *client.APIError
+		if moved && !serviceBumped && service == "" && prior.HasServiceToken.ValueBool() && errors.As(err, &ae) && ae.Status == http.StatusUnprocessableEntity {
+			err = fmt.Errorf("%w\n\nThe gateway address changed and SpaceMan holds a service-principal token, which it never sends to a "+
+				"new address: add service_token_wo, or bump service_token_wo_version to remove it", err)
+		}
 		addAPIError(&resp.Diagnostics, "Could not update the Harbor Pilot connection", err)
 		return
 	}
