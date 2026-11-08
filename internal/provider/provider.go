@@ -150,6 +150,8 @@ func (p *spacemanProvider) Resources(context.Context) []func() resource.Resource
 		newUserResource,
 		newUserGrantsResource,
 		newUserIdentityResource,
+		newHarborPilotConnectionResource,
+		newSpaceHarborPilotResource,
 	}
 }
 

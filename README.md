@@ -47,6 +47,8 @@ Status: **phases 1 and 2** of work package M5-01. Not published to a registry.
 | `spaceman_user` | `/users`, `PUT /users/{id}/profile` (email, display name and `mfa_required` in place; disabled on destroy) |
 | `spaceman_user_grants` | `PUT /users/{id}/grants` (the whole manual grant set) |
 | `spaceman_user_identity` | `/users/{id}/identities` (expected OIDC identity) |
+| `spaceman_harbor_pilot_connection` | `/harbor-pilot/connection` (singleton, import ID `harbor-pilot`; write-only `parent_token_wo` and `service_token_wo`) |
+| `spaceman_space_harbor_pilot` | `/spaces/{id}/harbor-pilot` (a space's Harbor Pilot opt-in; removed on destroy) |
 
 Data sources: `spaceman_node`, `spaceman_nodes`, `spaceman_space`, `spaceman_spaces`, `spaceman_event_template`,
 `spaceman_space_limits` (effective values and sources), `spaceman_user`.
@@ -106,6 +108,7 @@ terraform -chdir=examples/complete plan
 | `make lint` | golangci-lint with this repository's configuration. |
 | `make check` | `test` and `lint`. |
 | `make acc` | Acceptance tests (`TF_ACC=1`) against a real local central (see below). Needs Go, Terraform ≥ 1.11 and a SpaceMan checkout. |
+| `make acc-harbor-pilot` | The Harbor Pilot acceptance tests, including the combined example, against a real `harbor-pilot serve --demo` (see below). |
 | `make docs` | Regenerates `docs/` from the schemas and `examples/`. |
 
 The acceptance harness (`internal/provider/harness_test.go`) builds `spaceman` and `devpulse` from a SpaceMan checkout:
@@ -117,3 +120,12 @@ a `node_id` change planned in place and sent to SpaceMan as a relocation (refuse
 for phase 2 ownership of only the configured limit overrides, schedules, both sides of a cross-space grant, human-action
 policies, users with grants and linked identities. It stops only its own processes and removes only its own directory (`SM_TF_KEEP=1` keeps
 it for debugging). Nothing in the tests talks to a real model, Pulse deployment or identity provider.
+
+The Harbor Pilot tests (`TestAccHarborPilot*`) are opt-in: with `SPACEMAN_HARBOR_PILOT=1` they also start a real
+`harbor-pilot serve --demo` (v0.1.3) on a loopback port, from `HARBOR_PILOT_BIN` or else installed with `go install`
+into the user cache directory, and provision a client binding, a service principal and parent tokens through its demo
+administrator. `TestAccHarborPilotExample` builds the `harborpilot` provider (v0.1.1, fetched with `go mod download`, or
+`HARBORPILOT_PROVIDER_SRC`), points both providers at local builds through `dev_overrides`, and applies
+`examples/harbor-pilot` (Harbor Pilot's scenario 07 plus the SpaceMan side), plans again (must be empty), checks that no
+Harbor Pilot token is in the state and destroys it. The demo's model upstreams are synthetic: no provider credentials
+are involved. Run them with `make acc-harbor-pilot`.

@@ -310,7 +310,9 @@ func marshalDefinition(d *client.TemplateDefinition) (string, error) {
 	return canonicalJSON(string(b))
 }
 
-// templateFilterOps are the filter operators SpaceMan accepts (`absent` since SpaceMan ADR-0061).
+// templateFilterOps are the filter operators SpaceMan accepts (`absent` since SpaceMan ADR-0061). The source of truth
+// is go-spaceman's `filterOps` in internal/events/template/definition.go: an op added there is refused here at plan
+// time until this list gains it, so keep the two in sync.
 var templateFilterOps = []string{"eq", "ne", "in", "exists", "absent", "prefix"}
 
 // checkDefinition reports the mistakes in a configured definition that can be found without the server: an unknown

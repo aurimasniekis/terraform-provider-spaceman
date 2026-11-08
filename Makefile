@@ -1,7 +1,7 @@
 # terraform-provider-spaceman. The acceptance tests build SpaceMan from a checkout: SPACEMAN_SRC, or ../spaceman.
 GO ?= go
 
-.PHONY: all build test lint acc docs check
+.PHONY: all build test lint acc acc-harbor-pilot docs check
 
 all: check
 
@@ -18,6 +18,10 @@ lint:
 # Acceptance tests: Terraform >= 1.11 on PATH and a SpaceMan checkout (SPACEMAN_SRC, default ../spaceman).
 acc:
 	TF_ACC=1 $(GO) test -count=1 -timeout 30m -run '^TestAcc' ./internal/provider
+
+# The Harbor Pilot acceptance tests against a real `harbor-pilot serve --demo` (and the combined example).
+acc-harbor-pilot:
+	SPACEMAN_HARBOR_PILOT=1 TF_ACC=1 $(GO) test -count=1 -timeout 30m -run '^TestAccHarborPilot' ./internal/provider
 
 # Regenerates docs/ from the schemas and examples (a test checks they are current).
 docs:

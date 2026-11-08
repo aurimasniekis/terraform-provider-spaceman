@@ -3,6 +3,7 @@ package provider
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -64,6 +65,33 @@ data "spaceman_event_template" "gh" {
 `, sfx, spaceSlug, nodeID, pulseURL, creds, title)
 }
 
+// badOpHCL adds a template with an unknown op, and badIfSetHCL a custom subscription whose if_set names an undefined
+// variable: both are refused at plan time, before anything reaches SpaceMan.
+const badOpHCL = `
+resource "spaceman_event_template" "bad_op" {
+  slug = "tf-bad-op"
+  name = "TF bad op"
+  definition = jsonencode({
+    subject = "evt.github.>"
+    filters = [{ path = "data.action", op = "regex", value = "^op" }]
+    title   = "x"
+  })
+}
+`
+
+const badIfSetHCL = `
+resource "spaceman_event_subscription" "bad_if_set" {
+  space_id      = spaceman_space.s.id
+  name          = "bad if_set"
+  connection_id = spaceman_event_connection.c.id
+  custom = jsonencode({
+    subject = "evt.github.>"
+    filters = [{ path = "data.action", op = "eq", value = "opened", if_set = "missing" }]
+    title   = "x"
+  })
+}
+`
+
 // filtersOf decodes the filters of a definition stored in state.
 func filtersOf(s *terraform.State, res, attr string) ([]client.TemplateFilter, error) {
 	var d client.TemplateDefinition
@@ -119,6 +147,17 @@ func TestAccEventTemplateOptionalFilters(t *testing.T) {
 				resource.TestCheckResourceAttr("spaceman_event_template.t", "latest_version", "2"),
 				checkServer,
 			),
+		},
+		// The plan-time validator (definitionValidator): an unknown op and an if_set naming an undefined variable.
+		resource.TestStep{
+			Config:      optionalFiltersHCL(sfx, slug, acc.nodeA.ID, acc.pulseURL, acc.creds, "Comment on an issue") + badOpHCL,
+			PlanOnly:    true,
+			ExpectError: regexp.MustCompile(`"regex"\s+is\s+not\s+one\s+of`),
+		},
+		resource.TestStep{
+			Config:      optionalFiltersHCL(sfx, slug, acc.nodeA.ID, acc.pulseURL, acc.creds, "Comment on an issue") + badIfSetHCL,
+			PlanOnly:    true,
+			ExpectError: regexp.MustCompile(`variable\s+"missing"\s+is\s+not\s+defined`),
 		},
 		resource.TestStep{ResourceName: "spaceman_event_template.t", ImportState: true, ImportStateVerify: true},
 		resource.TestStep{ResourceName: "spaceman_event_subscription.custom", ImportState: true, ImportStateVerify: true,
