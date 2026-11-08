@@ -27,6 +27,7 @@ Status: **phases 1 and 2** of work package M5-01. Not published to a registry.
 | `spaceman_skill` | `/skills` (publishes immutable versions) |
 | `spaceman_mcp_server` | `/mcp-servers` (write-only `headers_wo`) |
 | `spaceman_mcp_grant` | `/mcp-servers/{id}/grants` |
+| `spaceman_admin_mcp_server` | `/mcp-servers/spaceman` (SpaceMan's own API as MCP tools; a secretless internal token, re-issued in place) |
 | `spaceman_event_connection` | `/event-connections` (write-only `creds_wo`) |
 | `spaceman_event_template` | `/event-templates`, `/event-template-versions/{id}/publish` |
 | `spaceman_event_subscription` | `/spaces/{id}/subscriptions` |

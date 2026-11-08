@@ -6,6 +6,16 @@ All notable changes to this provider are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- `spaceman_admin_mcp_server`: a SpaceMan MCP server (SpaceMan ADR-0063), SpaceMan's own API offered as MCP tools to a
+  space's control and worker runs, granted with the existing `spaceman_mcp_grant`. Inputs: `slug` (replaces; `spaceman`
+  is refused at plan time), `name`, `grants`, `preset` (default `admin`), `tools`, `approval` (default `none`; dangerous
+  tools are always gated by SpaceMan), `expires_in_days` / `never_expires` (default never), `enabled` and the limits.
+  Computed: `token_id`, `owner_user_id`, `expires_at`, `token_state`, `effective_tools` and `version`. It has no secret
+  attributes: the server acts through a secretless internal token. A `grants` or expiry change re-issues the token in
+  place (a new `token_id`, the old one revoked); every other change is an in-place edit, and destroy revokes the token.
+  The provider must use an API token issued by a user (not the root token). `spaceman_mcp_server` now refuses a
+  SpaceMan MCP server (on refresh and import) and points to this resource, which likewise refuses external (http)
+  servers. Needs the SpaceMan release that adds SpaceMan MCP servers.
 - Harbor Pilot gateway (SpaceMan ADR-0060). Needs the SpaceMan release that adds the Harbor Pilot gateway (after
   0.1.0-rc.9); configurations without these resources work with older servers.
   - `spaceman_harbor_pilot_connection`: central's connection to a Harbor Pilot gateway (0.1.3 or later), a singleton

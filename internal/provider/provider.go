@@ -129,6 +129,7 @@ func (p *spacemanProvider) Resources(context.Context) []func() resource.Resource
 		newPromptResource,
 		newSkillResource,
 		newMCPServerResource,
+		newAdminMCPServerResource,
 		newMCPGrantResource,
 		newEventConnectionResource,
 		newEventTemplateResource,

@@ -361,6 +361,7 @@ func (s *Skill) LatestPublished() *SkillVersion {
 // MCPServer is an upstream MCP server (never its header values).
 type MCPServer struct {
 	ID             string   `json:"id"`
+	Kind           string   `json:"kind,omitempty"` // "http", or "spaceman" for a SpaceMan MCP server (SpacemanMCPServer)
 	Slug           string   `json:"slug"`
 	Name           string   `json:"name"`
 	Description    string   `json:"description,omitempty"`
