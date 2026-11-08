@@ -141,23 +141,24 @@ func TestAccEventTemplateOptionalFilters(t *testing.T) {
 			),
 		},
 		resource.TestStep{Config: optionalFiltersHCL(sfx, slug, acc.nodeA.ID, acc.pulseURL, acc.creds, "Comment"), PlanOnly: true},
+		// The plan-time validator (definitionValidator): an unknown op and an if_set naming an undefined variable
+		// (before a valid apply, so the post-test destroy uses a valid configuration).
+		resource.TestStep{
+			Config:      optionalFiltersHCL(sfx, slug, acc.nodeA.ID, acc.pulseURL, acc.creds, "Comment") + badOpHCL,
+			PlanOnly:    true,
+			ExpectError: regexp.MustCompile(`"regex"\s+is\s+not\s+one\s+of`),
+		},
+		resource.TestStep{
+			Config:      optionalFiltersHCL(sfx, slug, acc.nodeA.ID, acc.pulseURL, acc.creds, "Comment") + badIfSetHCL,
+			PlanOnly:    true,
+			ExpectError: regexp.MustCompile(`variable\s+"missing"\s+is\s+not\s+defined`),
+		},
 		resource.TestStep{
 			Config: optionalFiltersHCL(sfx, slug, acc.nodeA.ID, acc.pulseURL, acc.creds, "Comment on an issue"),
 			Check: resource.ComposeAggregateTestCheckFunc(
 				resource.TestCheckResourceAttr("spaceman_event_template.t", "latest_version", "2"),
 				checkServer,
 			),
-		},
-		// The plan-time validator (definitionValidator): an unknown op and an if_set naming an undefined variable.
-		resource.TestStep{
-			Config:      optionalFiltersHCL(sfx, slug, acc.nodeA.ID, acc.pulseURL, acc.creds, "Comment on an issue") + badOpHCL,
-			PlanOnly:    true,
-			ExpectError: regexp.MustCompile(`"regex"\s+is\s+not\s+one\s+of`),
-		},
-		resource.TestStep{
-			Config:      optionalFiltersHCL(sfx, slug, acc.nodeA.ID, acc.pulseURL, acc.creds, "Comment on an issue") + badIfSetHCL,
-			PlanOnly:    true,
-			ExpectError: regexp.MustCompile(`variable\s+"missing"\s+is\s+not\s+defined`),
 		},
 		resource.TestStep{ResourceName: "spaceman_event_template.t", ImportState: true, ImportStateVerify: true},
 		resource.TestStep{ResourceName: "spaceman_event_subscription.custom", ImportState: true, ImportStateVerify: true,
