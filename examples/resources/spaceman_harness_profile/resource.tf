@@ -6,7 +6,7 @@ resource "spaceman_harness_profile" "careful" {
   settings = { permission_mode = "default" }
 }
 
-# Claude Code settings.json keys for the profile's runs (SpaceMan 0.1.0-rc.9 or later): any keys. "$defaults" keeps
+# Claude Code settings.json keys for the profile's runs: any keys. "$defaults" keeps
 # Claude Code's built-in rules in an auto mode list.
 resource "spaceman_harness_profile" "auto" {
   slug     = "auto"

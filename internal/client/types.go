@@ -161,8 +161,8 @@ type Profile struct {
 	Harness  string            `json:"harness"`
 	Model    string            `json:"model,omitempty"`
 	Settings map[string]string `json:"settings"`
-	// ClaudeSettings are the profile's Claude Code settings.json keys, a JSON object (SpaceMan 0.1.0-rc.9 or later;
-	// absent from older servers).
+	// ClaudeSettings are the profile's Claude Code settings.json keys, a JSON object (omitted when
+	// the profile has none).
 	ClaudeSettings json.RawMessage `json:"claude_settings,omitempty"`
 	Description    string          `json:"description,omitempty"`
 	Revision       int64           `json:"revision"`
@@ -361,6 +361,7 @@ func (s *Skill) LatestPublished() *SkillVersion {
 // MCPServer is an upstream MCP server (never its header values).
 type MCPServer struct {
 	ID             string   `json:"id"`
+	Kind           string   `json:"kind,omitempty"` // "http", or "spaceman" for a SpaceMan MCP server (SpacemanMCPServer)
 	Slug           string   `json:"slug"`
 	Name           string   `json:"name"`
 	Description    string   `json:"description,omitempty"`
@@ -431,12 +432,15 @@ type EventConnectionInput struct {
 	Enabled bool   `json:"enabled"`
 }
 
-// TemplateFilter is one filter of an event template definition.
+// TemplateFilter is one filter of an event template definition. IfSet and UnlessSet name a variable: the filter applies
+// only when that variable has a value (IfSet) or has none (UnlessSet) (SpaceMan ADR-0061).
 type TemplateFilter struct {
-	Path   string   `json:"path"`
-	Op     string   `json:"op"`
-	Value  string   `json:"value,omitempty"`
-	Values []string `json:"values,omitempty"`
+	Path      string   `json:"path"`
+	Op        string   `json:"op"`
+	Value     string   `json:"value,omitempty"`
+	Values    []string `json:"values,omitempty"`
+	IfSet     string   `json:"if_set,omitempty"`
+	UnlessSet string   `json:"unless_set,omitempty"`
 }
 
 // TemplateVariable is a subscription variable of a definition.

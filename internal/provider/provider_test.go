@@ -60,7 +60,7 @@ func TestSchemasAreValid(t *testing.T) {
 			}
 		}
 	}
-	if len(names) != 33 {
+	if len(names) != 36 {
 		t.Errorf("resources = %d", len(names))
 	}
 	for _, f := range p.DataSources(ctx) {
@@ -116,6 +116,49 @@ func TestCanonicalDefinition(t *testing.T) {
 	}
 	if _, err := canonicalDefinition(`not json`); err == nil {
 		t.Fatal("invalid JSON must be refused")
+	}
+}
+
+// TestDefinitionOptionalFilters (SpaceMan ADR-0061): if_set, unless_set and the absent op survive a round trip, and
+// the validator refuses unknown ops and optional filters naming undefined variables.
+func TestDefinitionOptionalFilters(t *testing.T) {
+	cfg := `{"subject":"evt.x.>","title":"T","body":"B",
+	  "variables":[{"name":"repository"},{"name":"include_bots","pattern":"true"}],
+	  "filters":[
+	    {"path":"data.repository.full_name","op":"eq","value":"{{vars.repository}}","if_set":"repository"},
+	    {"path":"data.actor.type","op":"ne","value":"Bot","unless_set":"include_bots"},
+	    {"path":"data.payload.issue.pull_request","op":"absent"}]}`
+	d, err := parseDefinition(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := checkDefinition(d); err != nil {
+		t.Fatalf("valid definition refused: %v", err)
+	}
+	if d.Filters[0].IfSet != "repository" || d.Filters[1].UnlessSet != "include_bots" || d.Filters[2].Op != "absent" {
+		t.Fatalf("filters lost fields: %+v", d.Filters)
+	}
+	if got := definitionValue(types.StringValue(cfg), d); got.ValueString() != cfg {
+		t.Fatalf("the server's equal definition is drift: %s", got)
+	}
+	server := *d
+	server.Filters = append([]client.TemplateFilter(nil), d.Filters...)
+	server.Filters[0].IfSet = ""
+	if got := definitionValue(types.StringValue(cfg), &server); got.ValueString() == cfg {
+		t.Fatal("a dropped if_set must be drift")
+	}
+	for _, tc := range []struct{ def, want string }{
+		{`{"subject":"evt.x.>","title":"T","body":"B","filters":[{"path":"data.a","op":"missing"}]}`, `filters[0].op: "missing"`},
+		{`{"subject":"evt.x.>","title":"T","body":"B","filters":[{"path":"data.a","op":"exists","if_set":"nope"}]}`, `filters[0].if_set: variable "nope"`},
+		{`{"subject":"evt.x.>","title":"T","body":"B","filters":[{"path":"data.a","op":"exists","unless_set":"nope"}]}`, `filters[0].unless_set: variable "nope"`},
+	} {
+		d, err := parseDefinition(tc.def)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := checkDefinition(d); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: got %v, want %q", tc.def, err, tc.want)
+		}
 	}
 }
 

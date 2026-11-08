@@ -186,7 +186,8 @@ type eventTemplateModel struct {
 	LatestVersionID types.String `tfsdk:"latest_version_id"`
 }
 
-// definitionValidator checks that a definition parses into the API's shape (the server validates its meaning).
+// definitionValidator checks that a definition parses into the API's shape, with known filter ops and optional filters
+// naming defined variables (the server validates the rest of its meaning).
 type definitionValidator struct{}
 
 func (definitionValidator) Description(context.Context) string {
@@ -199,7 +200,11 @@ func (definitionValidator) ValidateString(_ context.Context, req validator.Strin
 	if req.ConfigValue.IsNull() || req.ConfigValue.IsUnknown() {
 		return
 	}
-	if _, err := canonicalDefinition(req.ConfigValue.ValueString()); err != nil {
+	d, err := parseDefinition(req.ConfigValue.ValueString())
+	if err == nil {
+		err = checkDefinition(d)
+	}
+	if err != nil {
 		resp.Diagnostics.AddAttributeError(req.Path, "Invalid template definition", err.Error())
 	}
 }
@@ -221,7 +226,9 @@ func (r *eventTemplateResource) Schema(_ context.Context, _ resource.SchemaReque
 			"description": fixedOptString("Description. Fixed after creation.", "An event template's description"),
 			"definition": schema.StringAttribute{Required: true, Validators: []validatorString{definitionValidator{}},
 				MarkdownDescription: "The definition as JSON (use `jsonencode`): `subject`, `variables`, `filters`, `input_schema`, `title`, `body`, " +
-					"`instructions`, `correlation`, `urgency`. Formatting and key order never cause a diff."},
+					"`instructions`, `correlation`, `urgency`. A filter has `path`, `op` (`eq`, `ne`, `in`, `exists`, `absent`, `prefix`), `value` " +
+					"or `values`, and optionally `if_set` or `unless_set` naming a variable: the filter applies only when that variable has a value " +
+					"(`if_set`) or has none (`unless_set`). Formatting and key order never cause a diff."},
 			"notes":             defaultEmpty("Notes recorded with the published version."),
 			"latest_version":    schema.Int64Attribute{Computed: true, MarkdownDescription: "Number of the latest published version."},
 			"latest_version_id": schema.StringAttribute{Computed: true, MarkdownDescription: "ID of the latest published version (subscribe to it)."},

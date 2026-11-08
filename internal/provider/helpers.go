@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -307,6 +308,32 @@ func marshalDefinition(d *client.TemplateDefinition) (string, error) {
 		return "", err
 	}
 	return canonicalJSON(string(b))
+}
+
+// templateFilterOps are the filter operators SpaceMan accepts (`absent` since SpaceMan ADR-0061). The source of truth
+// is go-spaceman's `filterOps` in internal/events/template/definition.go: an op added there is refused here at plan
+// time until this list gains it, so keep the two in sync.
+var templateFilterOps = []string{"eq", "ne", "in", "exists", "absent", "prefix"}
+
+// checkDefinition reports the mistakes in a configured definition that can be found without the server: an unknown
+// filter op, and an `if_set` / `unless_set` naming a variable the definition doesn't define. SpaceMan validates the rest.
+func checkDefinition(d *client.TemplateDefinition) error {
+	vars := map[string]bool{}
+	for _, v := range d.Variables {
+		vars[v.Name] = true
+	}
+	var errs []error
+	for i, f := range d.Filters {
+		if !slices.Contains(templateFilterOps, f.Op) {
+			errs = append(errs, fmt.Errorf("filters[%d].op: %q is not one of %s", i, f.Op, strings.Join(templateFilterOps, ", ")))
+		}
+		for _, c := range [][2]string{{"if_set", f.IfSet}, {"unless_set", f.UnlessSet}} {
+			if c[1] != "" && !vars[c[1]] {
+				errs = append(errs, fmt.Errorf("filters[%d].%s: variable %q is not defined", i, c[0], c[1]))
+			}
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // parseDefinition decodes a definition from configuration.
