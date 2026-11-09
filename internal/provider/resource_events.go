@@ -460,6 +460,43 @@ func (r *subscriptionResource) Schema(_ context.Context, _ resource.SchemaReques
 	}
 }
 
+var _ resource.ResourceWithModifyPlan = (*subscriptionResource)(nil)
+
+// ModifyPlan marks what a change of the subscription's source recomputes. Moving to another template version (of any
+// template) or changing the custom definition changes template_id; switching to a custom definition clears
+// template_version_id when the configuration leaves it out; and SpaceMan binds the variables against the new definition
+// (filling in its defaults), so vars the configuration leaves out are known only after the apply.
+func (r *subscriptionResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	if req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
+		return
+	}
+	var plan, state subscriptionModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	customChanged := !plan.Custom.Equal(state.Custom)
+	if !customChanged && !plan.TemplateVersionID.IsUnknown() && plan.TemplateVersionID.Equal(state.TemplateVersionID) {
+		return
+	}
+	var cfgVersion types.String
+	var cfgVars types.Map
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("template_version_id"), &cfgVersion)...)
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("vars"), &cfgVars)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	plan.TemplateID = types.StringUnknown()
+	if customChanged && cfgVersion.IsNull() {
+		plan.TemplateVersionID = types.StringUnknown()
+	}
+	if cfgVars.IsNull() {
+		plan.Vars = types.MapUnknown(types.StringType)
+	}
+	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
+}
+
 func (r *subscriptionResource) cursor(ctx context.Context, v types.Object, diags *diagnostics) *client.Cursor {
 	if v.IsNull() || v.IsUnknown() {
 		return nil
