@@ -5,6 +5,14 @@ All notable changes to this provider are documented here. The format is based on
 
 ## [Unreleased]
 
+### Fixed
+- `spaceman_event_subscription`: moving a subscription to a version of another template no longer fails the apply
+  with "Provider produced inconsistent result after apply: .template_id" (the change itself had landed). `template_id`
+  is now known after the apply whenever `template_version_id` or `custom` changes. The same holds for `vars` the
+  configuration leaves out (SpaceMan binds them against the new definition and fills in its defaults), and for
+  `template_version_id` when switching to a `custom` definition without configuring it. Optional variables SpaceMan
+  stores as empty (for example `owner = ""`) remain no drift when the configuration names other variables.
+
 ## [0.1.0] - 2026-11-08
 
 Final 0.1.0 release, released with SpaceMan 0.1.0: SpaceMan MCP servers, the Harbor Pilot gateway and optional event
