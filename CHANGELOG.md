@@ -5,6 +5,11 @@ All notable changes to this provider are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-09
+
+Patch release, released with SpaceMan 0.1.1: a fix for event subscriptions that move to another template. It
+requires SpaceMan 0.1.0 or later and Terraform 1.11 or later, as 0.1.0 did.
+
 ### Fixed
 - `spaceman_event_subscription`: moving a subscription to a version of another template no longer fails the apply
   with "Provider produced inconsistent result after apply: .template_id" (the change itself had landed). `template_id`
@@ -169,7 +174,8 @@ First release candidate (pre-release; not production-ready, see SpaceMan's docs/
 - `spaceman_human_action_policy`: `response_inbox` (`off`, `routed` or `always`), whether a response also becomes an
   inbox item (SpaceMan SM-INBOX-001, ADR-0049). Without the attribute, the provider's writes reset the policy to `off`.
 
-[Unreleased]: https://github.com/aurimasniekis/terraform-provider-spaceman/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/aurimasniekis/terraform-provider-spaceman/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/aurimasniekis/terraform-provider-spaceman/releases/tag/v0.1.1
 [0.1.0]: https://github.com/aurimasniekis/terraform-provider-spaceman/releases/tag/v0.1.0
 [0.1.0-rc.9]: https://github.com/aurimasniekis/terraform-provider-spaceman/releases/tag/v0.1.0-rc.9
 [0.1.0-rc.8]: https://github.com/aurimasniekis/terraform-provider-spaceman/releases/tag/v0.1.0-rc.8
