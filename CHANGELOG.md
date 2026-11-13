@@ -5,6 +5,13 @@ All notable changes to this provider are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- `spaceman_space_limits`: `terminal_cols` and `terminal_rows` set the size new runs' terminals are held at (SpaceMan
+  ADR-0075). Each is 0 (the node's default size) or within SpaceMan's bounds, 40-400 columns and 10-200 rows, checked
+  at plan time; a size applies only when both are non-zero. Like the other limits, an attribute left out is not managed
+  and removing one clears its override. Changing either needs `terminal:takeover` in the space (space admins), and both
+  need SpaceMan 0.1.1 or later. The `spaceman_space_limits` data source already reported them.
+
 ## [0.1.2] - 2026-11-13
 
 Patch release, released with SpaceMan 0.1.2: Claude Code version pins on harness profiles, and Go 1.27.4. It requires

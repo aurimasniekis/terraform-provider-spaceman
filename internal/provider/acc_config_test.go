@@ -254,6 +254,58 @@ func TestAccLimits(t *testing.T) {
 	)
 }
 
+// TestAccLimitsTerminalSize covers the new-run terminal size limits (SpaceMan 0.1.1, ADR-0075): out-of-bounds values
+// are refused at plan time, a size is set and read back by the data source, 0 is an explicit "node default" override,
+// and removing the attributes clears both overrides.
+func TestAccLimitsTerminalSize(t *testing.T) {
+	testAccPreCheck(t)
+	slug := "tf-term-" + suffix()
+	cfg := func(limits string) string { return limitsHCL(slug, acc.nodeA.ID, limits, "", true) }
+	accSteps(t,
+		resource.TestStep{Config: cfg("  terminal_cols = 39\n  terminal_rows = 50"), PlanOnly: true,
+			ExpectError: regexp.MustCompile(`(?i)terminal_cols[\s\S]*between\s+40\s+and\s+400`)},
+		resource.TestStep{Config: cfg("  terminal_cols = 200\n  terminal_rows = 201"), PlanOnly: true,
+			ExpectError: regexp.MustCompile(`(?i)terminal_rows[\s\S]*between\s+10\s+and\s+200`)},
+		resource.TestStep{
+			Config: cfg("  terminal_cols = 200\n  terminal_rows = 50"),
+			Check: resource.ComposeAggregateTestCheckFunc(
+				expectOverrides(t, slug, map[string]int64{"terminal_cols": 200, "terminal_rows": 50}),
+				resource.TestCheckResourceAttr("spaceman_space_limits.l", "terminal_cols", "200"),
+				resource.TestCheckResourceAttr("spaceman_space_limits.l", "terminal_rows", "50"),
+				resource.TestCheckResourceAttr("data.spaceman_space_limits.e", "values.terminal_cols", "200"),
+				resource.TestCheckResourceAttr("data.spaceman_space_limits.e", "overrides.terminal_rows", "50"),
+			),
+		},
+		resource.TestStep{Config: cfg("  terminal_cols = 200\n  terminal_rows = 50"), PlanOnly: true},
+		// An import owns on_lower too (SpaceMan's drain), which this configuration leaves unmanaged.
+		resource.TestStep{ResourceName: "spaceman_space_limits.l", ImportState: true, ImportStateVerify: true,
+			ImportStateVerifyIgnore: []string{"on_lower"}},
+		// A size changed elsewhere is drift.
+		resource.TestStep{
+			PreConfig: func() { setOverride(t, spaceIDBySlug(t, slug), "terminal_cols", 120) },
+			Config:    cfg("  terminal_cols = 200\n  terminal_rows = 50"), PlanOnly: true, ExpectNonEmptyPlan: true,
+		},
+		// 0 is an override too: the node's default size, whatever the installation default is.
+		resource.TestStep{
+			Config: cfg("  terminal_cols = 0\n  terminal_rows = 0"),
+			Check: resource.ComposeAggregateTestCheckFunc(
+				expectOverrides(t, slug, map[string]int64{"terminal_cols": 0, "terminal_rows": 0}),
+				resource.TestCheckResourceAttr("spaceman_space_limits.l", "terminal_cols", "0"),
+				resource.TestCheckResourceAttr("data.spaceman_space_limits.e", "values.terminal_rows", "0"),
+			),
+		},
+		// Removing the attributes clears both overrides.
+		resource.TestStep{
+			Config: cfg("  max_concurrent_runs = 3"),
+			Check: resource.ComposeAggregateTestCheckFunc(
+				expectOverrides(t, slug, map[string]int64{"max_concurrent_runs": 3}),
+				resource.TestCheckNoResourceAttr("spaceman_space_limits.l", "terminal_cols"),
+				resource.TestCheckNoResourceAttr("data.spaceman_space_limits.e", "overrides.terminal_cols"),
+			),
+		},
+	)
+}
+
 func scheduleHCL(slug, nodeID, title, cron string, interval int, anchor string) string {
 	return fmt.Sprintf(`
 resource "spaceman_space" "s" {
