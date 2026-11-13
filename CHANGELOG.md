@@ -14,6 +14,10 @@ All notable changes to this provider are documented here. The format is based on
   current pin as well. A configured value is enforced, and a pin changed elsewhere shows as drift. Requires a SpaceMan
   release with Claude Code version pins; with older releases, leave the attribute out.
 
+### Security
+- Built with Go 1.27.4 (was 1.27.3). govulncheck reported GO-2026-6859, a race on request headers in
+  `net/http.MaxBytesReader` that Go 1.27.4 fixes.
+
 ## [0.1.1] - 2026-11-09
 
 Patch release, released with SpaceMan 0.1.1: a fix for event subscriptions that move to another template. It
