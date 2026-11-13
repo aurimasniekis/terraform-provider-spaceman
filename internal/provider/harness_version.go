@@ -33,7 +33,7 @@ func harnessVersionAttr() schema.StringAttribute {
 			"When the attribute is left out of the configuration the provider does not send it, so a pin set elsewhere (the web " +
 			"UI, the API) is kept and read into the state without showing as a change; removing the attribute from the " +
 			"configuration likewise keeps the current pin. Set it (to a value or `\"\"`) to have Terraform enforce it. Requires " +
-			"a SpaceMan release with Claude Code version pins."}
+			"SpaceMan 0.1.2 or later."}
 }
 
 // configuredHarnessVersion is the API value for the configured pin: nil (keep the stored pin) when the configuration

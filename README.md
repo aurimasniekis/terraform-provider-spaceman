@@ -8,9 +8,10 @@ permissions, user profiles, the incident policy), in SpaceMan's
 `docs/DECISIONS.md`. Until the move into this repository the provider was developed in SpaceMan's
 `terraform-provider-spaceman/` directory; its history came along.
 
-Status: **v0.1.1**, phases 1 and 2 of work package M5-01, released with SpaceMan v0.1.1.
+Status: **v0.1.2**, phases 1 and 2 of work package M5-01, released with SpaceMan v0.1.2.
 
 Requirements: SpaceMan **v0.1.0** or later and Terraform **1.11** or later (write-only arguments).
+`spaceman_harness_profile.harness_version` needs SpaceMan **v0.1.2** or later.
 
 ## What it manages
 
