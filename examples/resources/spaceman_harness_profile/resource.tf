@@ -4,6 +4,11 @@ resource "spaceman_harness_profile" "careful" {
   harness  = "claude-code"
   model    = "claude-sonnet-4-5"
   settings = { permission_mode = "default" }
+
+  # Pin the Claude Code version its runs get: latest, stable or an exact X.Y.Z.
+  # "" clears the pin (runs follow the node's channel); leaving it out keeps
+  # whatever pin SpaceMan has.
+  harness_version = "stable"
 }
 
 # Claude Code settings.json keys for the profile's runs: any keys. "$defaults" keeps
