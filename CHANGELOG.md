@@ -5,6 +5,10 @@ All notable changes to this provider are documented here. The format is based on
 
 ## [Unreleased]
 
+### Security
+- Built with Go 1.27.4 (was 1.27.3). govulncheck reported GO-2026-6859, a race on request headers in
+  `net/http.MaxBytesReader` that Go 1.27.4 fixes.
+
 ## [0.1.1] - 2026-11-09
 
 Patch release, released with SpaceMan 0.1.1: a fix for event subscriptions that move to another template. It
