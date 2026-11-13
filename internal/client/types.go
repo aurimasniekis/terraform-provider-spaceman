@@ -164,9 +164,11 @@ type Profile struct {
 	// ClaudeSettings are the profile's Claude Code settings.json keys, a JSON object (omitted when
 	// the profile has none).
 	ClaudeSettings json.RawMessage `json:"claude_settings,omitempty"`
-	Description    string          `json:"description,omitempty"`
-	Revision       int64           `json:"revision"`
-	Version        int64           `json:"version"`
+	// HarnessVersion is the profile's Claude Code version pin: "" follows the node's channel.
+	HarnessVersion string `json:"harness_version,omitempty"`
+	Description    string `json:"description,omitempty"`
+	Revision       int64  `json:"revision"`
+	Version        int64  `json:"version"`
 }
 
 // ProfileInput is PUT /harness-profiles/{id|new}.
@@ -178,7 +180,9 @@ type ProfileInput struct {
 	Settings map[string]string `json:"settings,omitempty"`
 	// ClaudeSettings nil keeps the stored settings; `{}` clears them.
 	ClaudeSettings json.RawMessage `json:"claude_settings,omitempty"`
-	Description    string          `json:"description,omitempty"`
+	// HarnessVersion nil keeps the stored pin; "" clears it.
+	HarnessVersion *string `json:"harness_version,omitempty"`
+	Description    string  `json:"description,omitempty"`
 }
 
 // RoleTemplate is a role template.

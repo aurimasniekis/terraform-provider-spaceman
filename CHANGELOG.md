@@ -5,6 +5,15 @@ All notable changes to this provider are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- `spaceman_harness_profile`: `harness_version` pins the Claude Code version a profile's runs get (SpaceMan ADR-0077):
+  `latest`, `stable` or an exact `X.Y.Z`, and `""` clears the pin so runs follow the node's channel. Values are checked
+  at plan time with SpaceMan's syntax (no leading zeros, no suffix), and so is the harness: only `claude-code` profiles
+  take a pin. The attribute is optional and computed: when the configuration leaves it out, the provider does not send
+  it, so a pin set elsewhere is kept and read into the state without a diff, and removing the attribute keeps the
+  current pin as well. A configured value is enforced, and a pin changed elsewhere shows as drift. Requires a SpaceMan
+  release with Claude Code version pins; with older releases, leave the attribute out.
+
 ### Security
 - Built with Go 1.27.4 (was 1.27.3). govulncheck reported GO-2026-6859, a race on request headers in
   `net/http.MaxBytesReader` that Go 1.27.4 fixes.

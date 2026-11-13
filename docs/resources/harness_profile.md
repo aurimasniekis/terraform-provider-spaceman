@@ -18,6 +18,11 @@ resource "spaceman_harness_profile" "careful" {
   harness  = "claude-code"
   model    = "claude-sonnet-4-5"
   settings = { permission_mode = "default" }
+
+  # Pin the Claude Code version its runs get: latest, stable or an exact X.Y.Z.
+  # "" clears the pin (runs follow the node's channel); leaving it out keeps
+  # whatever pin SpaceMan has.
+  harness_version = "stable"
 }
 
 # Claude Code settings.json keys for the profile's runs: any keys. "$defaults" keeps
@@ -55,6 +60,7 @@ resource "spaceman_harness_profile" "auto" {
 
 - `claude_settings` (String) Claude Code `settings.json` keys for the profile's runs, as a JSON object (`jsonencode({...})`): any keys, such as `permissions`, `autoMode`, `env` or `hooks` (`claude-code` profiles only; ADR-0059). SpaceMan sets them in each run's own `settings.json` at launch. `permissions.defaultMode` is held to central's permission mode ceiling. Hooks run commands on the node, and the settings are stored in clear, so keep secrets out. The server's key order never causes a diff. Removing the attribute or setting `jsonencode({})` clears the settings; SpaceMan stores both as no settings, so an import reads either as unset. A warning flags `env` keys that look like credential or endpoint overrides (`ANTHROPIC_*`, `CLAUDE_CODE_*`, `*_PROXY`).
 - `description` (String) Description.
+- `harness_version` (String) The Claude Code version the profile's runs get (`claude-code` profiles only; SpaceMan ADR-0077): `latest`, `stable` or an exact `X.Y.Z` (no leading zeros, no suffix). `""` clears the pin, so runs follow the node's channel. When the attribute is left out of the configuration the provider does not send it, so a pin set elsewhere (the web UI, the API) is kept and read into the state without showing as a change; removing the attribute from the configuration likewise keeps the current pin. Set it (to a value or `""`) to have Terraform enforce it. Requires a SpaceMan release with Claude Code version pins.
 - `model` (String) Model.
 - `settings` (Map of String) Harness settings (string values).
 
