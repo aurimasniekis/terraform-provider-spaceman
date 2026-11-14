@@ -5,6 +5,11 @@ All notable changes to this provider are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-11-14
+
+Patch release, released with SpaceMan 0.1.4: the terminal size limits on `spaceman_space_limits`. It requires SpaceMan
+0.1.0 or later and Terraform 1.11 or later, as before; `terminal_cols` and `terminal_rows` need SpaceMan 0.1.1 or later.
+
 ### Added
 - `spaceman_space_limits`: `terminal_cols` and `terminal_rows` set the size new runs' terminals are held at (SpaceMan
   ADR-0075). Each is 0 (the node's default size) or within SpaceMan's bounds, 40-400 columns and 10-200 rows, checked
@@ -199,7 +204,8 @@ First release candidate (pre-release; not production-ready, see SpaceMan's docs/
 - `spaceman_human_action_policy`: `response_inbox` (`off`, `routed` or `always`), whether a response also becomes an
   inbox item (SpaceMan SM-INBOX-001, ADR-0049). Without the attribute, the provider's writes reset the policy to `off`.
 
-[Unreleased]: https://github.com/aurimasniekis/terraform-provider-spaceman/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/aurimasniekis/terraform-provider-spaceman/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/aurimasniekis/terraform-provider-spaceman/releases/tag/v0.1.3
 [0.1.2]: https://github.com/aurimasniekis/terraform-provider-spaceman/releases/tag/v0.1.2
 [0.1.1]: https://github.com/aurimasniekis/terraform-provider-spaceman/releases/tag/v0.1.1
 [0.1.0]: https://github.com/aurimasniekis/terraform-provider-spaceman/releases/tag/v0.1.0
