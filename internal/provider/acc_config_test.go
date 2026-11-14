@@ -306,6 +306,57 @@ func TestAccLimitsTerminalSize(t *testing.T) {
 	)
 }
 
+// TestAccLimitsUsageLimit covers the usage-limit space limits (ADR-0079): out-of-bounds values are refused at plan time,
+// all four are set and read back by the data source, a change made elsewhere is drift, and removing them clears the
+// overrides.
+func TestAccLimitsUsageLimit(t *testing.T) {
+	testAccPreCheck(t)
+	slug := "tf-ul-" + suffix()
+	cfg := func(limits string) string { return limitsHCL(slug, acc.nodeA.ID, limits, "", true) }
+	all := "  usage_limit_failover = 1\n  usage_limit_keep_alive_max_minutes = 90\n" +
+		"  usage_limit_max_wait_hours = 48\n  usage_limit_notify_after_hours = 0"
+	accSteps(t,
+		resource.TestStep{Config: cfg("  usage_limit_failover = 2"), PlanOnly: true,
+			ExpectError: regexp.MustCompile(`(?i)usage_limit_failover[\s\S]*between\s+0\s+and\s+1`)},
+		resource.TestStep{Config: cfg("  usage_limit_keep_alive_max_minutes = 1441"), PlanOnly: true,
+			ExpectError: regexp.MustCompile(`(?i)usage_limit_keep_alive_max_minutes[\s\S]*between\s+1\s+and\s+1440`)},
+		resource.TestStep{Config: cfg("  usage_limit_max_wait_hours = 0"), PlanOnly: true,
+			ExpectError: regexp.MustCompile(`(?i)usage_limit_max_wait_hours[\s\S]*between\s+1\s+and\s+720`)},
+		resource.TestStep{Config: cfg("  usage_limit_notify_after_hours = 721"), PlanOnly: true,
+			ExpectError: regexp.MustCompile(`(?i)usage_limit_notify_after_hours[\s\S]*between\s+0\s+and\s+720`)},
+		resource.TestStep{
+			Config: cfg(all),
+			Check: resource.ComposeAggregateTestCheckFunc(
+				expectOverrides(t, slug, map[string]int64{"usage_limit_failover": 1, "usage_limit_keep_alive_max_minutes": 90,
+					"usage_limit_max_wait_hours": 48, "usage_limit_notify_after_hours": 0}),
+				resource.TestCheckResourceAttr("spaceman_space_limits.l", "usage_limit_failover", "1"),
+				resource.TestCheckResourceAttr("spaceman_space_limits.l", "usage_limit_notify_after_hours", "0"),
+				resource.TestCheckResourceAttr("data.spaceman_space_limits.e", "values.usage_limit_keep_alive_max_minutes", "90"),
+				resource.TestCheckResourceAttr("data.spaceman_space_limits.e", "overrides.usage_limit_max_wait_hours", "48"),
+			),
+		},
+		resource.TestStep{Config: cfg(all), PlanOnly: true},
+		// An import owns on_lower too (SpaceMan's drain), which this configuration leaves unmanaged.
+		resource.TestStep{ResourceName: "spaceman_space_limits.l", ImportState: true, ImportStateVerify: true,
+			ImportStateVerifyIgnore: []string{"on_lower"}},
+		// A value changed elsewhere is drift.
+		resource.TestStep{
+			PreConfig: func() { setOverride(t, spaceIDBySlug(t, slug), "usage_limit_max_wait_hours", 72) },
+			Config:    cfg(all), PlanOnly: true, ExpectNonEmptyPlan: true,
+		},
+		// Removing the attributes clears the overrides; the installation defaults apply again.
+		resource.TestStep{
+			Config: cfg("  max_concurrent_runs = 3"),
+			Check: resource.ComposeAggregateTestCheckFunc(
+				expectOverrides(t, slug, map[string]int64{"max_concurrent_runs": 3}),
+				resource.TestCheckNoResourceAttr("spaceman_space_limits.l", "usage_limit_failover"),
+				resource.TestCheckNoResourceAttr("data.spaceman_space_limits.e", "overrides.usage_limit_notify_after_hours"),
+				resource.TestCheckResourceAttr("data.spaceman_space_limits.e", "values.usage_limit_max_wait_hours", "168"),
+			),
+		},
+	)
+}
+
 func scheduleHCL(slug, nodeID, title, cron string, interval int, anchor string) string {
 	return fmt.Sprintf(`
 resource "spaceman_space" "s" {

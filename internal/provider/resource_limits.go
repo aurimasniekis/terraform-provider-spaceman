@@ -58,13 +58,31 @@ var spaceLimitAttrs = []limitAttr{
 	{"terminal_rows", "Height new runs' terminals are held at, in rows (10-200; 0: the node's default size). A size applies only when " +
 		"`terminal_cols` is set too (both non-zero); runs already started keep their size. Changing it needs `terminal:takeover` (space " +
 		"admins). Requires SpaceMan 0.1.1 or later."},
+	{"usage_limit_failover", "Let a launch or resume whose account is held at a usage limit use another account bound to the space for " +
+		"the same harness that is not held (1: on, 0: off, SpaceMan's default). A space routed through an LLM gateway never falls back to a " +
+		"direct account. Requires a SpaceMan version with usage limits (ADR-0079)."},
+	{"usage_limit_keep_alive_max_minutes", "Minutes a run at a usage limit waits for the reset with its process kept alive before it is " +
+		"stopped and parked; also the longest gap between checks of a hold whose reset time is unknown (1-1440; SpaceMan's default 360). " +
+		"Requires a SpaceMan version with usage limits."},
+	{"usage_limit_max_wait_hours", "Hours a worker or diagnostic run parked at a usage limit waits to be resumed before its task goes back " +
+		"to the queue, ready and unassigned; control is never given up on (1-720; SpaceMan's default 168, 7 days). A wait already parked " +
+		"keeps its release time. Requires a SpaceMan version with usage limits."},
+	{"usage_limit_notify_after_hours", "Hours away the reset of an account held at a usage limit must be for the space's people to get " +
+		"one human action about it, once per account window (0-720; 0: never; SpaceMan's default 12, so weekly limits, not 5-hour ones). " +
+		"Requires a SpaceMan version with usage limits."},
 }
 
 // limitChecks are the limits checked at plan time beyond "at least 0" (SpaceMan checks the other bounds). The terminal
-// size limits take 0 (the node's default) or SpaceMan's terminal size bounds (proto.TerminalMin/Max*).
+// size limits take 0 (the node's default) or SpaceMan's terminal size bounds (proto.TerminalMin/Max*); the usage limits
+// take SpaceMan's config.LimitRanges.
 var limitChecks = map[string]validator.Int64{
 	"terminal_cols": zeroOrBetween(40, 400),
 	"terminal_rows": zeroOrBetween(10, 200),
+	// Usage limits (ADR-0079): a switch, minutes and hours.
+	"usage_limit_failover":               int64validator.Between(0, 1),
+	"usage_limit_keep_alive_max_minutes": int64validator.Between(1, 1440),
+	"usage_limit_max_wait_hours":         int64validator.Between(1, 720),
+	"usage_limit_notify_after_hours":     int64validator.Between(0, 720),
 }
 
 // zeroOrBetween accepts 0 or a value within min..max (SpaceMan's terminal size limits: 0 is the node's default).
