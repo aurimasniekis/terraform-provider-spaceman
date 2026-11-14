@@ -7,5 +7,10 @@ resource "spaceman_space_limits" "payments" {
   task_deadline_minutes  = 240
   budget_tokens_24h      = 20000000
   budget_warn_percent    = 75
-  on_lower               = "drain"
+
+  # New runs' terminals are held at 200x50 (both must be set; 0 is the node's default). Needs terminal:takeover.
+  terminal_cols = 200
+  terminal_rows = 50
+
+  on_lower = "drain"
 }
