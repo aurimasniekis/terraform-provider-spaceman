@@ -154,6 +154,8 @@ func (p *spacemanProvider) Resources(context.Context) []func() resource.Resource
 		newHarborPilotConnectionResource,
 		newSpaceHarborPilotResource,
 		newTelegramBotResource,
+		newTelegramSettingsResource,
+		newSpaceTelegramResource,
 	}
 }
 
