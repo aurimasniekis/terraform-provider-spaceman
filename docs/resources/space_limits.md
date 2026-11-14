@@ -21,7 +21,12 @@ resource "spaceman_space_limits" "payments" {
   task_deadline_minutes  = 240
   budget_tokens_24h      = 20000000
   budget_warn_percent    = 75
-  on_lower               = "drain"
+
+  # New runs' terminals are held at 200x50 (both must be set; 0 is the node's default). Needs terminal:takeover.
+  terminal_cols = 200
+  terminal_rows = 50
+
+  on_lower = "drain"
 }
 ```
 
@@ -57,6 +62,8 @@ resource "spaceman_space_limits" "payments" {
 - `storage_quota_bytes` (Number) Attachment bytes stored for the space (1 MiB-1 TiB). Unset: not managed (the installation default or an override set elsewhere applies).
 - `support_depth` (Number) How deep support may nest (1-3; 1: a KB session cannot ask a knowledge base). Unset: not managed (the installation default or an override set elsewhere applies).
 - `task_deadline_minutes` (Number) How long a top-level task may run before control and the operators are told (0-43200; 0: none; never stops a task). Unset: not managed (the installation default or an override set elsewhere applies).
+- `terminal_cols` (Number) Width new runs' terminals are held at, in columns (40-400; 0: the node's default size, its `runner.terminal_size`). A size applies only when `terminal_rows` is set too (both non-zero); runs already started keep their size. Changing it needs `terminal:takeover` (space admins). Requires SpaceMan 0.1.1 or later (ADR-0075). Unset: not managed (the installation default or an override set elsewhere applies).
+- `terminal_rows` (Number) Height new runs' terminals are held at, in rows (10-200; 0: the node's default size). A size applies only when `terminal_cols` is set too (both non-zero); runs already started keep their size. Changing it needs `terminal:takeover` (space admins). Requires SpaceMan 0.1.1 or later. Unset: not managed (the installation default or an override set elsewhere applies).
 
 ### Read-Only
 
