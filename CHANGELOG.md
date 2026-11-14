@@ -11,6 +11,14 @@ All notable changes to this provider are documented here. The format is based on
   at plan time; a size applies only when both are non-zero. Like the other limits, an attribute left out is not managed
   and removing one clears its override. Changing either needs `terminal:takeover` in the space (space admins), and both
   need SpaceMan 0.1.1 or later. The `spaceman_space_limits` data source already reported them.
+- `spaceman_space_limits`: the usage-limit space limits (SpaceMan ADR-0079). `usage_limit_failover` (0 or 1) lets a
+  launch held at a usage limit use another account bound to the space for the same harness;
+  `usage_limit_keep_alive_max_minutes` (1-1440) is how long a limited run is kept alive before it is parked;
+  `usage_limit_max_wait_hours` (1-720) is how long a parked worker waits before its task goes back to the queue; and
+  `usage_limit_notify_after_hours` (0-720, 0: never) is how far away a reset must be for the space's people to be told.
+  The bounds are checked at plan time. Like the other limits, an attribute left out is not managed and removing one
+  clears its override. They need a SpaceMan version with usage limits; the `spaceman_space_limits` data source reports
+  them there without a provider change.
 
 ## [0.1.2] - 2026-11-13
 
