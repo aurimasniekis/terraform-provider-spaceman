@@ -54,6 +54,7 @@ and `terminal_rows` need SpaceMan **v0.1.1** or later.
 | `spaceman_user_identity` | `/users/{id}/identities` (expected OIDC identity) |
 | `spaceman_harbor_pilot_connection` | `/harbor-pilot/connection` (singleton, import ID `harbor-pilot`; write-only `parent_token_wo` and `service_token_wo`) |
 | `spaceman_space_harbor_pilot` | `/spaces/{id}/harbor-pilot` (a space's Harbor Pilot opt-in; removed on destroy) |
+| `spaceman_telegram_bot` | `/telegram/bot` (singleton, import ID `telegram-bot`; write-only `bot_token_wo`; destroy turns Telegram off) |
 
 Data sources: `spaceman_node`, `spaceman_nodes`, `spaceman_space`, `spaceman_spaces`, `spaceman_event_template`,
 `spaceman_space_limits` (effective values and sources), `spaceman_user`.

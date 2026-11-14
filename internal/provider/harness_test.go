@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -41,6 +42,7 @@ type accEnv struct {
 	procs      []*exec.Cmd
 	client     *client.Client
 	centralLog string
+	telegram   *httptest.Server // the fake Telegram Bot API central is configured to call
 }
 
 var acc *accEnv
@@ -204,6 +206,7 @@ func startDevServer() (*accEnv, error) {
 		return env, err
 	}
 	env.endpoint = fmt.Sprintf("http://127.0.0.1:%d", port)
+	env.telegram = startFakeTelegram()
 	cfg := filepath.Join(dir, "central.yaml")
 	yaml := fmt.Sprintf(`mode: development
 data_dir: %s
@@ -211,7 +214,8 @@ public_url: %s
 kek: {file: %s}
 http: {listen: "127.0.0.1:%d", management_listen: "127.0.0.1:%d"}
 log: {level: info, format: text}
-`, filepath.Join(dir, "central"), env.endpoint, filepath.Join(dir, "kek"), port, mport)
+telegram: {api_base_url: %s}
+`, filepath.Join(dir, "central"), env.endpoint, filepath.Join(dir, "kek"), port, mport, env.telegram.URL)
 	if err := os.WriteFile(cfg, []byte(yaml), 0o600); err != nil {
 		return env, err
 	}
@@ -293,6 +297,9 @@ func (e *accEnv) stop() {
 			_ = p.Process.Kill()
 			<-done
 		}
+	}
+	if e.telegram != nil {
+		e.telegram.Close()
 	}
 	if os.Getenv("SM_TF_KEEP") == "1" {
 		fmt.Fprintln(os.Stderr, "acceptance harness: kept", e.dir)

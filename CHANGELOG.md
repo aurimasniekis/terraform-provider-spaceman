@@ -5,6 +5,13 @@ All notable changes to this provider are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- `spaceman_telegram_bot`: central's Telegram bot (SpaceMan ADR-0083), a singleton with the import ID `telegram-bot`.
+  The token is write-only (`bot_token_wo` with `bot_token_wo_version`): never stored in state. `enabled`, `mode`
+  (`webhook` or `polling`), `miniapp_host` and `webhook_ip_allowlist` (canonical CIDRs, at most 32) are managed; `bot_id`,
+  `username`, `has_token`, `token_version` and `webhook_status` are computed. Destroy removes the webhook and the stored
+  token. Needs a SpaceMan release that ships the Telegram bot operations.
+
 ## [0.1.3] - 2026-11-14
 
 Patch release, released with SpaceMan 0.1.4: the terminal size limits on `spaceman_space_limits`. It requires SpaceMan
