@@ -186,7 +186,8 @@ func (r *telegramSettingsResource) Schema(_ context.Context, _ resource.SchemaRe
 		MarkdownDescription: "The policy and defaults of central's Telegram bot (`/telegram/settings`, SpaceMan ADR-0083): who may link, " +
 			"lifetimes, send and inbound limits, and each link's notification defaults. There is one set per central. Every attribute is " +
 			"optional: only the ones you set are stored, a value left out follows SpaceMan's built-in default (taking an attribute out of " +
-			"the configuration puts it back to the default), and the effective values are always shown. Out-of-range values are refused at plan time. Changes reach the running bot without a restart. A user's own " +
+			"the configuration puts it back to the default), and the effective values are always shown. The first plan after an import shows an update: " +
+			"applying it stores the configuration and records which values are configured. Out-of-range values are refused at plan time. Changes reach the running bot without a restart. A user's own " +
 			"notification preferences and time zone are theirs: they override these defaults and are not managed here. The bot itself " +
 			"(`spaceman_telegram_bot`) is separate, and the Bot API's address is not settable here: it stays in central's configuration file. " +
 			"Destroying the resource resets every value to its built-in default. Needs `system:write` and a step-up. Import with the ID `" +

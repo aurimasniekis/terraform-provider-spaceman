@@ -14,8 +14,8 @@ import (
 )
 
 // TestAccTelegramSettings (SpaceMan ADR-0083; needs SpaceMan with the Telegram settings operations): the singleton
-// starts from the built-in defaults, changes in place (including the nested limits and notification defaults), keeps
-// values left out of the configuration, imports, and resets to the defaults on destroy. Out-of-range values fail at
+// starts from the built-in defaults, changes in place (including the nested limits and notification defaults), puts
+// values left out of the configuration back to the defaults, imports, and resets to the defaults on destroy. Out-of-range values fail at
 // plan time.
 func TestAccTelegramSettings(t *testing.T) {
 	const addr = "spaceman_telegram_settings.this"
@@ -193,6 +193,52 @@ resource "spaceman_telegram_settings" "this" {
 		resource.TestStep{Config: removed, PlanOnly: true},
 		resource.TestStep{ResourceName: addr, ImportState: true, ImportStateId: "telegram-settings", ImportStateVerify: true},
 		resource.TestStep{ResourceName: addr, ImportState: true, ImportStateId: "other", ExpectError: regexp.MustCompile("singleton")},
+	)
+}
+
+// TestAccTelegramSettingsImportThenDrop: after an import the provider has no record of which values were configured,
+// so the first plan is a one-off update that seeds it; dropping an attribute afterwards then reverts it to the default.
+func TestAccTelegramSettingsImportThenDrop(t *testing.T) {
+	const addr = "spaceman_telegram_settings.this"
+	withDays := `
+resource "spaceman_telegram_settings" "this" {
+  link_default_max_role = "viewer"
+  link_reconfirm_days   = 30
+}
+`
+	withoutDays := `
+resource "spaceman_telegram_settings" "this" {
+  link_default_max_role = "viewer"
+}
+`
+	forget := `
+removed {
+  from = spaceman_telegram_settings.this
+  lifecycle {
+    destroy = false
+  }
+}
+`
+	accCase(t, func(*terraform.State) error { return nil },
+		resource.TestStep{Config: withDays, Check: resource.TestCheckResourceAttr(addr, "link_reconfirm_days", "30")},
+		// Out of the state without destroying, then imported again: the private record is gone.
+		resource.TestStep{Config: forget},
+		resource.TestStep{Config: withDays, ResourceName: addr, ImportState: true, ImportStateId: "telegram-settings", ImportStatePersist: true},
+		// The first plan seeds the record (an update), the next one is empty.
+		resource.TestStep{
+			Config: withDays,
+			ConfigPlanChecks: resource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
+				plancheck.ExpectResourceAction(addr, plancheck.ResourceActionUpdate)}},
+			Check: resource.TestCheckResourceAttr(addr, "link_reconfirm_days", "30"),
+		},
+		resource.TestStep{Config: withDays, PlanOnly: true},
+		resource.TestStep{
+			Config: withoutDays,
+			ConfigPlanChecks: resource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
+				plancheck.ExpectResourceAction(addr, plancheck.ResourceActionUpdate)}},
+			Check: resource.TestCheckResourceAttr(addr, "link_reconfirm_days", "90"),
+		},
+		resource.TestStep{Config: withoutDays, PlanOnly: true},
 	)
 }
 

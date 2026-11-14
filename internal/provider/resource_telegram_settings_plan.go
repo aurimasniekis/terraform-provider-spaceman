@@ -78,20 +78,22 @@ func getLeaf(ctx context.Context, src attrGetter, l tgLeaf, d *diag.Diagnostics)
 }
 
 // configuredLeaves reads which leaves were configured at the last apply.
-func configuredLeaves(ctx context.Context, p privateReader, d *diag.Diagnostics) map[string]bool {
-	out := map[string]bool{}
+// recorded is false when there is no record at all (the resource was imported).
+func configuredLeaves(ctx context.Context, p privateReader, d *diag.Diagnostics) (out map[string]bool, recorded bool) {
+	out = map[string]bool{}
 	if p == nil {
-		return out
+		return out, false
 	}
 	b, dd := p.GetKey(ctx, configuredKey)
 	d.Append(dd...)
 	var keys []string
 	if len(b) > 0 && json.Unmarshal(b, &keys) == nil {
+		recorded = true
 		for _, k := range keys {
 			out[k] = true
 		}
 	}
-	return out
+	return out, recorded
 }
 
 // setConfiguredLeaves records the leaves the configuration sets.
@@ -112,20 +114,22 @@ func setConfiguredLeaves(ctx context.Context, p privateWriter, cfg attrGetter, d
 // ModifyPlan keeps the settings in step with what SpaceMan will store. A leaf that was configured and no longer is goes
 // back to SpaceMan's default; any save stores only the configured leaves, so every leaf left out is then re-read from
 // SpaceMan. The rules that span values are checked on the planned values: a side the configuration leaves out is its
-// stored value (or its built-in default on create and when it reverts).
+// stored value (or its built-in default on create and whenever an update is planned, as it then resets).
 func (r *telegramSettingsResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
 	if req.Plan.Raw.IsNull() {
 		return // destroy
 	}
 	leaves := tgLeaves(ctx)
-	configured := configuredLeaves(ctx, req.Private, &resp.Diagnostics)
+	configured, recorded := configuredLeaves(ctx, req.Private, &resp.Diagnostics)
 	hasState := !req.State.Raw.IsNull()
 
 	type side struct {
 		cfg, plan, state attr.Value
 	}
 	sides := map[string]side{}
-	changed := false
+	// After an import there is no record of what was configured, so a leaf taken out later could not be told from one
+	// that was never set: plan a one-off update, whose apply stores only the configuration and seeds the record.
+	changed := hasState && !recorded
 	for _, l := range leaves {
 		s := side{cfg: getLeaf(ctx, req.Config, l, &resp.Diagnostics), plan: getLeaf(ctx, req.Plan, l, &resp.Diagnostics)}
 		if hasState {
@@ -170,7 +174,7 @@ func (r *telegramSettingsResource) ModifyPlan(ctx context.Context, req resource.
 			return nil, false
 		case !s.cfg.IsNull():
 			return s.cfg, true
-		case hasState && !configured[key] && s.state != nil && !s.state.IsNull() && !s.state.IsUnknown():
+		case hasState && !changed && s.state != nil && !s.state.IsNull() && !s.state.IsUnknown():
 			return s.state, true
 		}
 		return nil, true // the built-in default
