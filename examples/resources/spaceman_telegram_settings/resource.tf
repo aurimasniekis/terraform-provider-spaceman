@@ -1,4 +1,5 @@
-# Every attribute is optional: left out, a value is kept as it is (SpaceMan's built-in default until something sets it).
+# Every attribute is optional: only what you set is stored, and an attribute left out (or taken out later) follows
+# SpaceMan's built-in default, which the values below are.
 resource "spaceman_telegram_settings" "this" {
   # Who may link, and for how long.
   link_default_max_role = "operator" # or "viewer": the most a Telegram session may do in any space

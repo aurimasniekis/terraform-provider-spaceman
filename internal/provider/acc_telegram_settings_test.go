@@ -89,6 +89,12 @@ resource "spaceman_telegram_settings" "this" {
   notification_defaults = { digest_time = "08:15" }
 }
 `
+	// Attributes taken out of the configuration go back to SpaceMan's defaults.
+	removed := `
+resource "spaceman_telegram_settings" "this" {
+  send_limits = { queue_per_chat = 10 }
+}
+`
 	accCase(t, gone,
 		resource.TestStep{
 			Config: first,
@@ -149,17 +155,42 @@ resource "spaceman_telegram_settings" "this" {
 			),
 		},
 		resource.TestStep{Config: changed, PlanOnly: true},
-		// Values left out of the configuration are kept, not reset.
+		// Attributes that were set and are now left out go back to their defaults; the rest is as configured.
 		resource.TestStep{
 			Config: partial,
 			Check: resource.ComposeAggregateTestCheckFunc(
 				resource.TestCheckResourceAttr(addr, "send_limits.queue_total", "100"),
 				resource.TestCheckResourceAttr(addr, "send_limits.queue_per_chat", "10"),
+				resource.TestCheckResourceAttr(addr, "send_limits.global_per_second", "25"),
 				resource.TestCheckResourceAttr(addr, "notification_defaults.digest_time", "08:15"),
-				resource.TestCheckResourceAttr(addr, "link_reconfirm_days", "60"),
+				resource.TestCheckResourceAttr(addr, "notification_defaults.quiet_hours_end", "08:00"),
+				resource.TestCheckResourceAttr(addr, "link_reconfirm_days", "90"),
+				resource.TestCheckResourceAttr(addr, "link_allow_admin_cap", "false"),
 			),
 		},
 		resource.TestStep{Config: partial, PlanOnly: true},
+		// Removing a set attribute reverts it, and only the configured fields are stored.
+		resource.TestStep{
+			Config: removed,
+			ConfigPlanChecks: resource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
+				plancheck.ExpectResourceAction(addr, plancheck.ResourceActionUpdate)}},
+			Check: resource.ComposeAggregateTestCheckFunc(
+				resource.TestCheckResourceAttr(addr, "send_limits.queue_total", "5000"),
+				resource.TestCheckResourceAttr(addr, "send_limits.queue_per_chat", "10"),
+				resource.TestCheckResourceAttr(addr, "notification_defaults.digest_time", "09:00"),
+				apiCheck(addr, func(ctx context.Context, c *client.Client, _ string, _ *terraform.State) error {
+					s, err := c.GetTelegramSettings(ctx)
+					if err != nil {
+						return err
+					}
+					if !s.Stored || s.SendLimits.QueueTotal != 5000 || s.SendLimits.QueuePerChat != 10 || s.NotificationDefaults.DigestTime != "09:00" {
+						return fmt.Errorf("settings = %+v", s)
+					}
+					return nil
+				}),
+			),
+		},
+		resource.TestStep{Config: removed, PlanOnly: true},
 		resource.TestStep{ResourceName: addr, ImportState: true, ImportStateId: "telegram-settings", ImportStateVerify: true},
 		resource.TestStep{ResourceName: addr, ImportState: true, ImportStateId: "other", ExpectError: regexp.MustCompile("singleton")},
 	)
@@ -181,6 +212,12 @@ func TestAccTelegramSettingsPlanTime(t *testing.T) {
 		bad(`send_limits = { global_per_second = 31 }`),
 		bad(`send_limits = { chat_per_second = 0 }`),
 		bad(`send_limits = { queue_total = 10, queue_per_chat = 20 }`),
+		// One side only: the other side is SpaceMan's default (50 per chat; 23:00 to 08:00; 900 s idle).
+		bad(`send_limits = { queue_total = 10 }`),
+		bad(`notification_defaults = { quiet_hours_start = "08:00" }`),
+		bad(`notification_defaults = { quiet_hours_end = "23:00" }`),
+		bad(`miniapp_session_absolute_seconds = 900
+  miniapp_session_idle_seconds = 3600`),
 		bad(`inbound_limits = { updates_per_second = 101 }`),
 		bad(`notification_defaults = { digest_time = "9:00" }`),
 		bad(`notification_defaults = { quiet_hours_start = "22:00", quiet_hours_end = "22:00" }`),

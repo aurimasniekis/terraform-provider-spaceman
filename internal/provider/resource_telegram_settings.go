@@ -101,8 +101,8 @@ func (positiveFloat) ValidateFloat64(_ context.Context, req validator.Float64Req
 
 var tgClock = regexp.MustCompile(`^([01][0-9]|2[0-3]):[0-5][0-9]$`)
 
-// The attribute builders below are all optional and computed: left out, the value is kept as is (SpaceMan's built-in
-// default until something sets it), so it never shows as drift. The bounds are those of SpaceMan's settings API.
+// The attribute builders below are all optional and computed: left out, the value is SpaceMan's own default (shown as
+// it is, so it never reads as drift), and what was set and is taken out goes back to it (see ModifyPlan). The bounds are those of SpaceMan's settings API.
 
 func tgInt(desc string, lo, hi int64) schema.Int64Attribute {
 	a := optInt64(fmt.Sprintf("%s (%d to %d)", desc, lo, hi))
@@ -185,8 +185,8 @@ func (r *telegramSettingsResource) Schema(_ context.Context, _ resource.SchemaRe
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "The policy and defaults of central's Telegram bot (`/telegram/settings`, SpaceMan ADR-0083): who may link, " +
 			"lifetimes, send and inbound limits, and each link's notification defaults. There is one set per central. Every attribute is " +
-			"optional: left out, a value is kept as it is (SpaceMan's built-in default until something sets it), and the effective values " +
-			"are always shown. Out-of-range values are refused at plan time. Changes reach the running bot without a restart. A user's own " +
+			"optional: only the ones you set are stored, a value left out follows SpaceMan's built-in default (taking an attribute out of " +
+			"the configuration puts it back to the default), and the effective values are always shown. Out-of-range values are refused at plan time. Changes reach the running bot without a restart. A user's own " +
 			"notification preferences and time zone are theirs: they override these defaults and are not managed here. The bot itself " +
 			"(`spaceman_telegram_bot`) is separate, and the Bot API's address is not settable here: it stays in central's configuration file. " +
 			"Destroying the resource resets every value to its built-in default. Needs `system:write` and a step-up. Import with the ID `" +
@@ -306,6 +306,7 @@ func float64Ptr(v types.Float64) *float64 {
 	return &x
 }
 
+// input is the PUT body: the model is the configuration, so a value left out is not sent.
 func (r *telegramSettingsResource) input(ctx context.Context, m *telegramSettingsModel, d *diagnostics) client.TelegramSettingsInput {
 	in := client.TelegramSettingsInput{
 		LinkDefaultMaxRole: strPtr(m.LinkDefaultMaxRole), LinkAllowAdminCap: boolPtr(m.LinkAllowAdminCap), LinkSSOGrants: boolPtr(m.LinkSSOGrants),
@@ -352,8 +353,9 @@ func (r *telegramSettingsResource) save(ctx context.Context, m *telegramSettings
 }
 
 func (r *telegramSettingsResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	// Only the configured values are sent; the rest takes SpaceMan's defaults and is read back.
 	var m telegramSettingsModel
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &m)...)
+	resp.Diagnostics.Append(req.Config.Get(ctx, &m)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -373,6 +375,7 @@ func (r *telegramSettingsResource) Create(ctx context.Context, req resource.Crea
 	}
 	r.toModel(ctx, s, &m, &resp.Diagnostics)
 	setVersion(ctx, resp.Private, s.Version, &resp.Diagnostics)
+	setConfiguredLeaves(ctx, resp.Private, req.Config, &resp.Diagnostics)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &m)...)
 }
 
@@ -397,7 +400,7 @@ func (r *telegramSettingsResource) Read(ctx context.Context, req resource.ReadRe
 
 func (r *telegramSettingsResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var m telegramSettingsModel
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &m)...)
+	resp.Diagnostics.Append(req.Config.Get(ctx, &m)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -416,6 +419,7 @@ func (r *telegramSettingsResource) Update(ctx context.Context, req resource.Upda
 	}
 	r.toModel(ctx, s, &m, &resp.Diagnostics)
 	setVersion(ctx, resp.Private, s.Version, &resp.Diagnostics)
+	setConfiguredLeaves(ctx, resp.Private, req.Config, &resp.Diagnostics)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &m)...)
 }
 

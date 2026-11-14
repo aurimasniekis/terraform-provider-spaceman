@@ -7,12 +7,13 @@ description: |-
 
 # spaceman_telegram_settings (Resource)
 
-The policy and defaults of central's Telegram bot (`/telegram/settings`, SpaceMan ADR-0083): who may link, lifetimes, send and inbound limits, and each link's notification defaults. There is one set per central. Every attribute is optional: left out, a value is kept as it is (SpaceMan's built-in default until something sets it), and the effective values are always shown. Out-of-range values are refused at plan time. Changes reach the running bot without a restart. A user's own notification preferences and time zone are theirs: they override these defaults and are not managed here. The bot itself (`spaceman_telegram_bot`) is separate, and the Bot API's address is not settable here: it stays in central's configuration file. Destroying the resource resets every value to its built-in default. Needs `system:write` and a step-up. Import with the ID `telegram-settings`.
+The policy and defaults of central's Telegram bot (`/telegram/settings`, SpaceMan ADR-0083): who may link, lifetimes, send and inbound limits, and each link's notification defaults. There is one set per central. Every attribute is optional: only the ones you set are stored, a value left out follows SpaceMan's built-in default (taking an attribute out of the configuration puts it back to the default), and the effective values are always shown. Out-of-range values are refused at plan time. Changes reach the running bot without a restart. A user's own notification preferences and time zone are theirs: they override these defaults and are not managed here. The bot itself (`spaceman_telegram_bot`) is separate, and the Bot API's address is not settable here: it stays in central's configuration file. Destroying the resource resets every value to its built-in default. Needs `system:write` and a step-up. Import with the ID `telegram-settings`.
 
 ## Example Usage
 
 ```terraform
-# Every attribute is optional: left out, a value is kept as it is (SpaceMan's built-in default until something sets it).
+# Every attribute is optional: only what you set is stored, and an attribute left out (or taken out later) follows
+# SpaceMan's built-in default, which the values below are.
 resource "spaceman_telegram_settings" "this" {
   # Who may link, and for how long.
   link_default_max_role = "operator" # or "viewer": the most a Telegram session may do in any space

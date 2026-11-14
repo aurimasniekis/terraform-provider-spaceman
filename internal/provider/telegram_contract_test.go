@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -16,8 +17,10 @@ import (
 )
 
 // The Telegram settings schemas are kept in step with SpaceMan's API: the attributes and the bounds of every value are
-// compared with the OpenAPI document of the SpaceMan checkout (SPACEMAN_SRC, or ../spaceman). Without a checkout, or
-// with one that predates the settings operations, the test is skipped.
+// compared with the OpenAPI document of the SpaceMan checkout (SPACEMAN_SRC, or ../spaceman). The schemas are found
+// through the request bodies of the operations, not by Go type names. Without a checkout, or with one that predates
+// the settings operations, the test is skipped, unless SM_REQUIRE_OPENAPI=1 (set in CI), which turns every skip into a
+// failure: a pipeline that no longer compares anything must not stay green.
 
 type oaProp struct {
 	Type             any      `json:"type"`
@@ -29,32 +32,70 @@ type oaProp struct {
 	Ref              string   `json:"$ref"`
 }
 
-func loadOpenAPISchemas(t *testing.T) map[string]struct {
+type oaSchema struct {
 	Properties map[string]oaProp `json:"properties"`
-} {
+}
+
+type oaDoc struct {
+	Paths map[string]map[string]struct {
+		RequestBody struct {
+			Content map[string]struct {
+				Schema struct {
+					Ref string `json:"$ref"`
+				} `json:"schema"`
+			} `json:"content"`
+		} `json:"requestBody"`
+	} `json:"paths"`
+	Components struct {
+		Schemas map[string]oaSchema `json:"schemas"`
+	} `json:"components"`
+}
+
+// skipOrFail skips the test, or fails it when SM_REQUIRE_OPENAPI is set.
+func skipOrFail(t *testing.T, format string, args ...any) {
+	t.Helper()
+	if os.Getenv("SM_REQUIRE_OPENAPI") != "" {
+		t.Fatalf("SM_REQUIRE_OPENAPI is set, but the contract cannot be checked: "+format, args...)
+	}
+	t.Skipf(format, args...)
+}
+
+func loadOpenAPIDoc(t *testing.T) *oaDoc {
 	t.Helper()
 	root, err := repoRoot()
 	if err != nil {
-		t.Skipf("no SpaceMan checkout: %v", err)
+		skipOrFail(t, "no SpaceMan checkout: %v", err)
 	}
 	b, err := os.ReadFile(filepath.Join(root, "api", "openapi.json"))
 	if err != nil {
-		t.Skipf("no OpenAPI document: %v", err)
+		skipOrFail(t, "no OpenAPI document: %v", err)
 	}
-	var doc struct {
-		Components struct {
-			Schemas map[string]struct {
-				Properties map[string]oaProp `json:"properties"`
-			} `json:"schemas"`
-		} `json:"components"`
-	}
+	var doc oaDoc
 	if err := json.Unmarshal(b, &doc); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := doc.Components.Schemas["SettingsInput"]; !ok {
-		t.Skip("the SpaceMan checkout has no Telegram settings operations")
+	return &doc
+}
+
+// requestSchema is the schema the PUT of an API path takes as its JSON body, found through the body's $ref.
+func (d *oaDoc) requestSchema(t *testing.T, apiPath string) oaSchema {
+	t.Helper()
+	op, ok := d.Paths[apiPath]["put"]
+	if !ok {
+		skipOrFail(t, "the SpaceMan checkout has no PUT %s", apiPath)
 	}
-	return doc.Components.Schemas
+	return d.schemaByRef(t, op.RequestBody.Content["application/json"].Schema.Ref, "PUT "+apiPath)
+}
+
+func (d *oaDoc) schemaByRef(t *testing.T, ref, what string) oaSchema {
+	t.Helper()
+	const prefix = "#/components/schemas/"
+	name, found := strings.CutPrefix(ref, prefix)
+	sc, ok := d.Components.Schemas[name]
+	if !found || !ok {
+		t.Fatalf("%s: the schema %q cannot be resolved", what, ref)
+	}
+	return sc
 }
 
 func validateInt(vs []validator.Int64, v int64) bool {
@@ -176,21 +217,24 @@ func compareAttrs(t *testing.T, name string, attrs map[string]schema.Attribute, 
 }
 
 func TestTelegramSettingsMatchOpenAPI(t *testing.T) {
-	schemas := loadOpenAPISchemas(t)
+	doc := loadOpenAPIDoc(t)
 	ctx := context.Background()
 	var rs resource.SchemaResponse
 	newTelegramSettingsResource().Schema(ctx, resource.SchemaRequest{}, &rs)
 	attrs := rs.Schema.Attributes
-	props := schemas["SettingsInput"].Properties
+	props := doc.requestSchema(t, "/telegram/settings").Properties
 	var top = map[string]schema.Attribute{}
 	for k, a := range attrs {
 		top[k] = a
 	}
-	// The nested objects are compared below.
+	// The nested objects are compared through the $ref of their field.
+	nested := func(field string) map[string]oaProp {
+		return doc.schemaByRef(t, props[field].Ref, field).Properties
+	}
 	compareAttrs(t, "telegram_settings", top, props, "id", "send_limits", "inbound_limits", "notification_defaults")
-	compareAttrs(t, "send_limits", tgSendLimitsAttrs, schemas["SettingsSendLimitsInput"].Properties)
-	compareAttrs(t, "inbound_limits", tgInboundLimitsAttrs, schemas["SettingsInboundLimitsInput"].Properties)
-	compareAttrs(t, "notification_defaults", tgNotificationAttrs, schemas["SettingsNotificationDefaultsInput"].Properties)
+	compareAttrs(t, "send_limits", tgSendLimitsAttrs, nested("send_limits"))
+	compareAttrs(t, "inbound_limits", tgInboundLimitsAttrs, nested("inbound_limits"))
+	compareAttrs(t, "notification_defaults", tgNotificationAttrs, nested("notification_defaults"))
 	for _, k := range []string{"send_limits", "inbound_limits", "notification_defaults"} {
 		if _, ok := attrs[k]; !ok || props[k].Ref == "" {
 			t.Errorf("%s is missing on one side", k)
@@ -199,5 +243,5 @@ func TestTelegramSettingsMatchOpenAPI(t *testing.T) {
 
 	var sr resource.SchemaResponse
 	newSpaceTelegramResource().Schema(ctx, resource.SchemaRequest{}, &sr)
-	compareAttrs(t, "space_telegram", sr.Schema.Attributes, schemas["SettingsSpaceInput"].Properties, "id", "space_id")
+	compareAttrs(t, "space_telegram", sr.Schema.Attributes, doc.requestSchema(t, "/spaces/{space_id}/telegram").Properties, "id", "space_id")
 }
