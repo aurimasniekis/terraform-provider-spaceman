@@ -2,8 +2,12 @@ package provider
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -31,21 +35,87 @@ resource "spaceman_telegram_bot" "bot" {
 `, c.token, c.version, c.body)
 }
 
-// tgNoToken fails when a bot token (or its secret half) appears anywhere in the state.
-func tgNoToken(tokens ...string) resource.TestCheckFunc {
+// tgNoToken fails when a bot token (or its secret half) appears anywhere in the state: the decoded state and, from
+// the raw terraform.tfstate under stateDir, the file itself and the base64 "private" blobs (and their values).
+func tgNoToken(stateDir string, tokens ...string) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		b, err := json.Marshal(s)
 		if err != nil {
 			return err
 		}
+		hay := []string{string(b)}
+		raw, err := tgRawState(stateDir)
+		if err != nil {
+			return err
+		}
+		hay = append(hay, raw...)
 		for _, tok := range tokens {
 			_, secret, _ := strings.Cut(tok, ":")
-			if strings.Contains(string(b), tok) || strings.Contains(string(b), secret) {
-				return fmt.Errorf("a bot token (%s…) is in the state", tok[:4])
+			for _, h := range hay {
+				if strings.Contains(h, tok) || strings.Contains(h, secret) {
+					return fmt.Errorf("a bot token (%s…) is in the state", tok[:4])
+				}
 			}
 		}
 		return nil
 	}
+}
+
+// tgRawState returns the text of terraform.tfstate under dir plus each decoded "private" value in it. It fails if
+// there is no state file, so the check cannot pass by looking at nothing.
+func tgRawState(dir string) ([]string, error) {
+	var file string
+	_ = filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+		if err == nil && !d.IsDir() && d.Name() == "terraform.tfstate" {
+			file = p
+		}
+		return nil
+	})
+	if file == "" {
+		return nil, fmt.Errorf("no terraform.tfstate under %s", dir)
+	}
+	b, err := os.ReadFile(file)
+	if err != nil {
+		return nil, err
+	}
+	out := []string{string(b)}
+	var st struct {
+		Resources []struct {
+			Instances []struct {
+				Private string `json:"private"`
+			} `json:"instances"`
+		} `json:"resources"`
+	}
+	if err := json.Unmarshal(b, &st); err != nil {
+		return nil, err
+	}
+	n := 0
+	for _, r := range st.Resources {
+		for _, i := range r.Instances {
+			if i.Private == "" {
+				continue
+			}
+			n++
+			dec, err := base64.StdEncoding.DecodeString(i.Private)
+			if err != nil {
+				return nil, fmt.Errorf("private state is not base64: %w", err)
+			}
+			out = append(out, string(dec))
+			// The framework keeps private state as a JSON map of base64 values.
+			var kv map[string]string
+			if json.Unmarshal(dec, &kv) == nil {
+				for _, v := range kv {
+					if d2, err := base64.StdEncoding.DecodeString(v); err == nil {
+						out = append(out, string(d2))
+					}
+				}
+			}
+		}
+	}
+	if n == 0 {
+		return nil, fmt.Errorf("no private state in %s: the leak check would not see it", file)
+	}
+	return out, nil
 }
 
 type tgNoTokenInPlan struct{ tokens []string }
@@ -70,7 +140,9 @@ func (c tgNoTokenInPlan) CheckPlan(_ context.Context, req plancheck.CheckPlanReq
 // and destroy. The token is never in the state or the plan.
 func TestAccTelegramBot(t *testing.T) {
 	t1, t2 := "1001:AAtfsecretone", "2002:AAtfsecrettwo"
-	noLeak := tgNoToken(t1, t2)
+	stateDir := t.TempDir()
+	t.Setenv("TF_ACC_TEMP_DIR", stateDir) // the working directory, so the check can read terraform.tfstate
+	noLeak := tgNoToken(stateDir, t1, t2)
 	planNoLeak := resource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{tgNoTokenInPlan{[]string{t1, t2}}}}
 	base := tgBotConfig{token: t1, version: 1}
 	settings := tgBotConfig{token: t1, version: 1, body: `
@@ -153,5 +225,15 @@ func TestAccTelegramBotBadCIDR(t *testing.T) {
 		Config:      tgBotConfig{token: "3003:AAtfsecretthree", version: 1, body: `  webhook_ip_allowlist = ["10.0.0.1/8"]`}.hcl(),
 		PlanOnly:    true,
 		ExpectError: regexp.MustCompile(`canonical`),
+	})
+}
+
+// enabled = true in webhook mode needs central's public URL to be https, which the dev server's is not: central's
+// refusal comes back as the apply error and nothing is created. The success path (a https public URL registering the
+// webhook) is covered by go-spaceman's tgbot tests.
+func TestAccTelegramBotWebhookNeedsHTTPS(t *testing.T) {
+	accSteps(t, resource.TestStep{
+		Config:      tgBotConfig{token: "4004:AAtfsecretfour", version: 1, body: `  enabled = true`}.hcl(),
+		ExpectError: regexp.MustCompile(`webhook mode needs central's public_url to be https`),
 	})
 }

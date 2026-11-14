@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net/netip"
+	"regexp"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -58,9 +60,65 @@ func (canonicalCIDR) ValidateString(_ context.Context, req validator.StringReque
 		return
 	}
 	p, err := netip.ParsePrefix(req.ConfigValue.ValueString())
+	if err == nil && p.Addr().Is4In6() {
+		resp.Diagnostics.AddAttributeError(req.Path, "IPv4-mapped CIDR",
+			fmt.Sprintf("%q is an IPv4-mapped IPv6 prefix, which never matches: list the IPv4 range (e.g. 149.154.160.0/20).", req.ConfigValue.ValueString()))
+		return
+	}
 	if err != nil || p.Masked() != p || p.String() != req.ConfigValue.ValueString() {
 		resp.Diagnostics.AddAttributeError(req.Path, "Not a canonical CIDR",
 			fmt.Sprintf("%q must be a CIDR in canonical form (host bits zero, e.g. 149.154.160.0/20).", req.ConfigValue.ValueString()))
+	}
+}
+
+var (
+	tgNumericLabel = regexp.MustCompile(`^([0-9]+|0x[0-9a-f]*)$`)
+	tgHostLabel    = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
+)
+
+// miniAppHostError mirrors central's checkMiniAppHost (without the public-URL comparison, which needs server
+// configuration): it returns why host is not acceptable, or "".
+func miniAppHostError(host string) string {
+	if host == "" {
+		return ""
+	}
+	if _, err := netip.ParseAddr(strings.Trim(host, "[]")); err == nil {
+		return "must be a DNS name, not an IP address"
+	}
+	if strings.ContainsAny(host, ":/?#@ ") {
+		return "must be a bare host name, without scheme, port or path (e.g. tg.central.example.com)"
+	}
+	if host != strings.ToLower(host) {
+		return "must be lower case"
+	}
+	labels := strings.Split(host, ".")
+	if len(host) > 253 || len(labels) < 2 {
+		return "must be a fully qualified DNS name of at most 253 characters (e.g. tg.central.example.com)"
+	}
+	for _, l := range labels {
+		if !tgHostLabel.MatchString(l) {
+			return "is not a valid DNS name: each label is 1-63 of a-z, 0-9 and '-', not starting or ending with '-'"
+		}
+	}
+	if tgNumericLabel.MatchString(labels[len(labels)-1]) {
+		return "must not end in a number: browsers read 127.1, 0x7f.1 or 0177.0.0.1 as an IPv4 address and refuse tg.123"
+	}
+	return ""
+}
+
+type miniAppHost struct{}
+
+func (miniAppHost) Description(context.Context) string {
+	return "a lower-case DNS name such as `tg.central.example.com`"
+}
+func (m miniAppHost) MarkdownDescription(ctx context.Context) string { return m.Description(ctx) }
+func (miniAppHost) ValidateString(_ context.Context, req validator.StringRequest, resp *validator.StringResponse) {
+	if req.ConfigValue.IsNull() || req.ConfigValue.IsUnknown() {
+		return
+	}
+	if msg := miniAppHostError(req.ConfigValue.ValueString()); msg != "" {
+		resp.Diagnostics.AddAttributeError(req.Path, "Invalid miniapp_host",
+			fmt.Sprintf("%q %s.", req.ConfigValue.ValueString(), msg))
 	}
 }
 
@@ -80,21 +138,25 @@ func (r *telegramBotResource) Schema(_ context.Context, _ resource.SchemaRequest
 			"Terraform 1.11 or later). Configuring a different bot (another bot ID) revokes every Telegram link; a new token of the same " +
 			"bot keeps them. The Bot API's address is not settable here: it stays in central's configuration file. Destroying the resource " +
 			"removes the webhook and the stored token, so Telegram is off; links stay and resume if the same bot is configured again. " +
-			"Needs `system:write` and a step-up. Import with the ID `" + telegramBotImportID + "`.",
+			"Needs `system:write` and a step-up. Import with the ID `" + telegramBotImportID + "`. " +
+			"Import leaves `bot_token_wo_version` unset, so the first apply after an import sends the token again: that bumps `token_version` " +
+			"and rotates the webhook secret; it is the same bot, so Telegram links stay.",
 		Attributes: map[string]schema.Attribute{
 			"id": idAttr("Always `" + telegramBotImportID + "` (the bot is a singleton)."),
 			"bot_token_wo": schema.StringAttribute{Required: true, WriteOnly: true, Sensitive: true,
 				MarkdownDescription: "The token BotFather gave (`123456:ABC…`) (write-only). Sent on create and whenever " +
 					"`bot_token_wo_version` changes; otherwise SpaceMan keeps the stored token."},
 			"bot_token_wo_version": woVersion("bot_token_wo"),
-			"enabled":              optBool("Whether central runs the bot (webhook or polling). `false` (the default): Telegram is off and the webhook is removed."),
+			"enabled": optBool("Whether central runs the bot (webhook or polling). Left out: kept as is (`false` on create). Set `false` " +
+				"explicitly to turn Telegram off and remove the webhook."),
 			"mode": optString("How updates arrive: `webhook` (default; needs central's public URL to be https) or `polling` (outbound only).",
 				stringvalidator.OneOf("webhook", "polling")),
-			"miniapp_host": optString("The Mini App's own host: a lower-case DNS name such as `tg.central.example.com`, without scheme, port or " +
-				"path, not an IP address and not the host of central's public URL. Empty (the default): the Mini App is off."),
+			"miniapp_host": optString("The Mini App's own host: a lower-case DNS name such as `tg.central.example.com`, without scheme, port or "+
+				"path, not an IP address and not the host of central's public URL. Left out: kept as is (empty on create). Set `\"\"` "+
+				"explicitly to turn the Mini App off.", miniAppHost{}),
 			"webhook_ip_allowlist": schema.SetAttribute{Optional: true, Computed: true, ElementType: types.StringType,
-				MarkdownDescription: "CIDRs (canonical form, e.g. `149.154.160.0/20`) the webhook accepts requests from, at most 32. Empty (the " +
-					"default): no source check. Only safe when the client address behind your proxy is trustworthy.",
+				MarkdownDescription: "CIDRs (canonical form, e.g. `149.154.160.0/20`) the webhook accepts requests from, at most 32. Left out: kept as is (empty on create: " +
+					"no source check). Set `[]` explicitly to clear it. Only safe when the client address behind your proxy is trustworthy.",
 				Validators:    []validator.Set{setvalidator.SizeAtMost(32), setvalidator.ValueStringsAre(canonicalCIDR{})},
 				PlanModifiers: []planmodifier.Set{setplanmodifier.UseStateForUnknown()}},
 			"bot_id": computedInt("The bot's Telegram user ID, from Telegram's `getMe`."),

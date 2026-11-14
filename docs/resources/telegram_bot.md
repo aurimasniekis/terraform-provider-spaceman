@@ -9,7 +9,7 @@ description: |-
 
 Central's Telegram bot (`/telegram/bot`, SpaceMan ADR-0083). There is one per central. Linked users get notifications and can act on approvals from Telegram; the Mini App opens SpaceMan inside Telegram.
 
-The bot token is write-only: checked with Telegram, sealed by SpaceMan, never returned and never stored by Terraform (requires Terraform 1.11 or later). Configuring a different bot (another bot ID) revokes every Telegram link; a new token of the same bot keeps them. The Bot API's address is not settable here: it stays in central's configuration file. Destroying the resource removes the webhook and the stored token, so Telegram is off; links stay and resume if the same bot is configured again. Needs `system:write` and a step-up. Import with the ID `telegram-bot`.
+The bot token is write-only: checked with Telegram, sealed by SpaceMan, never returned and never stored by Terraform (requires Terraform 1.11 or later). Configuring a different bot (another bot ID) revokes every Telegram link; a new token of the same bot keeps them. The Bot API's address is not settable here: it stays in central's configuration file. Destroying the resource removes the webhook and the stored token, so Telegram is off; links stay and resume if the same bot is configured again. Needs `system:write` and a step-up. Import with the ID `telegram-bot`. Import leaves `bot_token_wo_version` unset, so the first apply after an import sends the token again: that bumps `token_version` and rotates the webhook secret; it is the same bot, so Telegram links stay.
 
 ## Example Usage
 
@@ -47,10 +47,10 @@ resource "spaceman_telegram_bot" "this" {
 ### Optional
 
 - `bot_token_wo_version` (Number) Change this number to send `bot_token_wo` again (rotation). Terraform never stores the write-only value, so it cannot see when the value itself changes.
-- `enabled` (Boolean) Whether central runs the bot (webhook or polling). `false` (the default): Telegram is off and the webhook is removed.
-- `miniapp_host` (String) The Mini App's own host: a lower-case DNS name such as `tg.central.example.com`, without scheme, port or path, not an IP address and not the host of central's public URL. Empty (the default): the Mini App is off.
+- `enabled` (Boolean) Whether central runs the bot (webhook or polling). Left out: kept as is (`false` on create). Set `false` explicitly to turn Telegram off and remove the webhook.
+- `miniapp_host` (String) The Mini App's own host: a lower-case DNS name such as `tg.central.example.com`, without scheme, port or path, not an IP address and not the host of central's public URL. Left out: kept as is (empty on create). Set `""` explicitly to turn the Mini App off.
 - `mode` (String) How updates arrive: `webhook` (default; needs central's public URL to be https) or `polling` (outbound only).
-- `webhook_ip_allowlist` (Set of String) CIDRs (canonical form, e.g. `149.154.160.0/20`) the webhook accepts requests from, at most 32. Empty (the default): no source check. Only safe when the client address behind your proxy is trustworthy.
+- `webhook_ip_allowlist` (Set of String) CIDRs (canonical form, e.g. `149.154.160.0/20`) the webhook accepts requests from, at most 32. Left out: kept as is (empty on create: no source check). Set `[]` explicitly to clear it. Only safe when the client address behind your proxy is trustworthy.
 
 ### Read-Only
 
@@ -68,4 +68,6 @@ Import is supported using the following syntax:
 ```shell
 # The bot is a singleton: its import ID is always telegram-bot.
 terraform import spaceman_telegram_bot.this telegram-bot
+# Import leaves bot_token_wo_version unset: the first apply after it resends the token (token_version +1, the webhook
+# secret rotates). It is the same bot, so Telegram links stay.
 ```
