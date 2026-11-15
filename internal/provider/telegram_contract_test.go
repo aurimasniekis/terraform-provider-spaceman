@@ -168,6 +168,9 @@ func compareAttrs(t *testing.T, name string, attrs map[string]schema.Attribute, 
 		}
 		switch a := a.(type) {
 		case schema.Int64Attribute:
+			if k == "group_chat_id" {
+				continue // a chat ID: the API only says "negative, or 0" in prose; the validator rejects positive IDs early
+			}
 			if p.Minimum == nil || p.Maximum == nil {
 				t.Errorf("%s.%s: the API has no bounds to compare with", name, k)
 				continue

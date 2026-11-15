@@ -210,6 +210,7 @@ type SpaceTelegram struct {
 	EnforcedApprovals string `json:"enforced_approvals"`
 	Topics            bool   `json:"topics"`
 	TerminalWatch     bool   `json:"terminal_watch"`
+	GroupChatID       int64  `json:"group_chat_id"` // the bound forum supergroup; 0 (omitted by central) when none
 	Version           int64  `json:"version"`
 }
 
@@ -220,6 +221,9 @@ type SpaceTelegramInput struct {
 	EnforcedApprovals *string `json:"enforced_approvals,omitempty"`
 	Topics            *bool   `json:"topics,omitempty"`
 	TerminalWatch     *bool   `json:"terminal_watch,omitempty"`
+	// GroupChatID binds the forum supergroup (negative chat ID) to the space and 0 unbinds it; nil leaves the binding
+	// as it is. Changing it needs telegram_group:write.
+	GroupChatID *int64 `json:"group_chat_id,omitempty"`
 }
 
 func spaceTelegramPath(spaceID string) string { return "/spaces/" + esc(spaceID) + "/telegram" }

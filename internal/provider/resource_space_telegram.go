@@ -4,11 +4,14 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
@@ -29,6 +32,7 @@ type spaceTelegramModel struct {
 	EnforcedApprovals types.String `tfsdk:"enforced_approvals"`
 	Topics            types.Bool   `tfsdk:"topics"`
 	TerminalWatch     types.Bool   `tfsdk:"terminal_watch"`
+	GroupChatID       types.Int64  `tfsdk:"group_chat_id"`
 }
 
 func (r *spaceTelegramResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -58,6 +62,14 @@ func (r *spaceTelegramResource) Schema(_ context.Context, _ resource.SchemaReque
 				"or only on the web (`web_only`; default).", "web_only", "web_only", "confirm"),
 			"topics":         flag("Whether the space gets its own topic for users in topics mode. Default `false`."),
 			"terminal_watch": flag("Whether a run's terminal can be watched (read-only) from the Mini App. Default `false`."),
+			"group_chat_id": schema.Int64Attribute{Optional: true, Computed: true,
+				MarkdownDescription: "Group mode: the chat ID of the forum supergroup (a negative number such as `-1001234567890`) bound to the space, " +
+					"where members who linked their account can use the space's summaries. Left out: the binding is not managed and stays as it " +
+					"is (`0` when none). Set `0` to unbind. Changing it needs the admin permission `telegram_group:write` (besides " +
+					"`space_config:write`); the group must be a forum supergroup (topics turned on) the bot is a member of (422 otherwise), " +
+					"the bot must be running (503 otherwise) and a group serves one space only (409 when it is bound to another).",
+				Validators:    []validator.Int64{int64validator.AtMost(0)},
+				PlanModifiers: []planmodifier.Int64{int64planmodifier.UseStateForUnknown()}},
 		},
 	}
 }
@@ -70,17 +82,27 @@ func (r *spaceTelegramResource) toModel(s *client.SpaceTelegram, m *spaceTelegra
 	m.EnforcedApprovals = types.StringValue(s.EnforcedApprovals)
 	m.Topics = types.BoolValue(s.Topics)
 	m.TerminalWatch = types.BoolValue(s.TerminalWatch)
+	m.GroupChatID = types.Int64Value(s.GroupChatID)
 }
 
 func (r *spaceTelegramResource) save(ctx context.Context, m *spaceTelegramModel, version int64, d *diagnostics) (*client.SpaceTelegram, bool) {
 	s, err := r.c.PutSpaceTelegram(ctx, m.SpaceID.ValueString(), version, client.SpaceTelegramInput{
 		Enabled: boolPtr(m.Enabled), ContentLevel: strPtr(m.ContentLevel), EnforcedApprovals: strPtr(m.EnforcedApprovals),
-		Topics: boolPtr(m.Topics), TerminalWatch: boolPtr(m.TerminalWatch)})
+		Topics: boolPtr(m.Topics), TerminalWatch: boolPtr(m.TerminalWatch), GroupChatID: groupChatIDPtr(m.GroupChatID)})
 	if err != nil {
 		addAPIError(d, "Could not save the space's Telegram settings", err)
 		return nil, false
 	}
 	return s, true
+}
+
+// groupChatIDPtr is what is sent: a configured value (0 unbinds), or nothing, so that central leaves the binding alone.
+func groupChatIDPtr(v types.Int64) *int64 {
+	if v.IsNull() || v.IsUnknown() {
+		return nil
+	}
+	n := v.ValueInt64()
+	return &n
 }
 
 func (r *spaceTelegramResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {

@@ -18,6 +18,8 @@ All notable changes to this provider are documented here. The format is based on
 - `spaceman_space_telegram`: a space's Telegram opt-in (`/spaces/{id}/telegram`): `enabled`, `content_level`,
   `enforced_approvals`, `topics` and `terminal_watch`. Destroy turns Telegram off for the space. Import with the space ID.
   Both need a SpaceMan release that ships the Telegram settings operations.
+- `spaceman_space_telegram.group_chat_id`: binds a forum supergroup (group mode) to the space; left out it is not managed, `0`
+  unbinds, import reads it back. Needs the admin permission `telegram_group:write` and a SpaceMan release that ships group mode.
 
 ## [0.1.3] - 2026-11-14
 
