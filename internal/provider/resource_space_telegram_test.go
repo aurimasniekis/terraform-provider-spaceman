@@ -150,6 +150,8 @@ func TestSpaceTelegramUpdateResendsOnlyChangedGroup(t *testing.T) {
 			if resp.Diagnostics.HasError() {
 				t.Fatal(resp.Diagnostics)
 			}
+			f.mu.Lock()
+			defer f.mu.Unlock()
 			if len(f.puts) != 1 {
 				t.Fatalf("PUTs = %d", len(f.puts))
 			}
