@@ -129,6 +129,9 @@ func (r *telegramSettingsResource) ModifyPlan(ctx context.Context, req resource.
 	sides := map[string]side{}
 	// After an import there is no record of what was configured, so a leaf taken out later could not be told from one
 	// that was never set: plan a one-off update, whose apply stores only the configuration and seeds the record.
+	// Known gap: an import whose configuration sets every leaf to its current value plans no diff at all, so no apply
+	// runs and the record is never seeded; a later leaf taken out is then not reverted. Accepted, because it needs
+	// every leaf configured to exactly the stored value right after an import, which is very unlikely.
 	changed := hasState && !recorded
 	for _, l := range leaves {
 		s := side{cfg: getLeaf(ctx, req.Config, l, &resp.Diagnostics), plan: getLeaf(ctx, req.Plan, l, &resp.Diagnostics)}
