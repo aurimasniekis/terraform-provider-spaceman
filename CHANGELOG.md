@@ -11,6 +11,13 @@ All notable changes to this provider are documented here. The format is based on
   (`webhook` or `polling`), `miniapp_host` and `webhook_ip_allowlist` (canonical CIDRs, at most 32) are managed; `bot_id`,
   `username`, `has_token`, `token_version` and `webhook_status` are computed. Destroy removes the webhook and the stored
   token. Needs a SpaceMan release that ships the Telegram bot operations.
+- `spaceman_telegram_settings`: the policy and defaults of the Telegram bot (`/telegram/settings`), a singleton with the import
+  ID `telegram-settings`: link policy (default cap, admin cap, SSO grants, reconfirm interval, links per user, link code
+  lifetime), Mini App lifetimes, `send_limits`, `inbound_limits`, `notification_defaults` and `topics_mode_default`. Every
+  attribute is optional and out-of-range values fail at plan time; destroy resets everything to SpaceMan's defaults.
+- `spaceman_space_telegram`: a space's Telegram opt-in (`/spaces/{id}/telegram`): `enabled`, `content_level`,
+  `enforced_approvals`, `topics` and `terminal_watch`. Destroy turns Telegram off for the space. Import with the space ID.
+  Both need a SpaceMan release that ships the Telegram settings operations.
 
 ## [0.1.3] - 2026-11-14
 
