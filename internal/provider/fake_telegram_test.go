@@ -11,9 +11,9 @@ import (
 // fakeForumChatID is the one chat the fake Telegram knows: a forum supergroup the bot is a member of.
 const fakeForumChatID int64 = -1001234567890
 
-// startFakeTelegram serves a minimal Telegram Bot API (<base>/bot<token>/<method>) for the acceptance tests: getMe
-// answers with a bot whose ID is the token's numeric prefix, getUpdates is an empty long poll, and getChat finds only fakeForumChatID, every other method
-// succeeds. It never needs the real network.
+// startFakeTelegram serves a minimal Telegram Bot API (<base>/bot<token>/<method>) for the acceptance tests. getMe
+// answers with a bot whose ID is the token's numeric prefix, getUpdates is an empty long poll, getChat finds only
+// fakeForumChatID, and every other method succeeds. It never needs the real network.
 func startFakeTelegram() *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")

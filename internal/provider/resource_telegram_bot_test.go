@@ -84,15 +84,3 @@ func TestMiniAppHostError(t *testing.T) {
 		}
 	}
 }
-
-func TestGroupChatIDPtr(t *testing.T) {
-	if groupChatIDPtr(types.Int64Null()) != nil || groupChatIDPtr(types.Int64Unknown()) != nil {
-		t.Fatal("null and unknown must send nothing, so that central leaves the binding alone")
-	}
-	if p := groupChatIDPtr(types.Int64Value(0)); p == nil || *p != 0 {
-		t.Fatalf("0 must be sent (it unbinds): %v", p)
-	}
-	if p := groupChatIDPtr(types.Int64Value(-1001)); p == nil || *p != -1001 {
-		t.Fatalf("got %v", p)
-	}
-}

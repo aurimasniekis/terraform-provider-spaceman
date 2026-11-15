@@ -468,7 +468,26 @@ resource "spaceman_space_telegram" "s" {
 		resource.TestStep{Config: hcl(`  group_chat_id = ` + group), Check: bound(fakeForumChatID)},
 		resource.TestStep{ResourceName: addr, ImportState: true, ImportStateVerify: true},
 		// A chat the bot is not a member of is refused, and the binding stays.
-		resource.TestStep{Config: hcl(`  group_chat_id = 5`), PlanOnly: true, ExpectError: regexp.MustCompile(`at most 0`)},
+		resource.TestStep{Config: hcl(`  group_chat_id = 5`), PlanOnly: true, ExpectError: regexp.MustCompile(`negative supergroup chat ID`)},
 		resource.TestStep{Config: hcl(`  group_chat_id = -1009999999999`), ExpectError: regexp.MustCompile(`not a member`)},
+		resource.TestStep{Config: hcl(`  group_chat_id = ` + group), Check: resource.ComposeAggregateTestCheckFunc(
+			resource.TestCheckResourceAttr(addr, "group_chat_id", group), bound(fakeForumChatID))},
+		// Drift: the group is unbound through the API; with the attribute configured the plan shows a rebind, and applying restores it.
+		resource.TestStep{
+			PreConfig: func() {
+				ctx := context.Background()
+				id := spaceIDBySlug(t, slug)
+				cur, err := acc.client.GetSpaceTelegram(ctx, id)
+				if err != nil {
+					t.Fatal(err)
+				}
+				zero := int64(0)
+				if _, err := acc.client.PutSpaceTelegram(ctx, id, cur.Version, client.SpaceTelegramInput{GroupChatID: &zero}); err != nil {
+					t.Fatal(err)
+				}
+			},
+			Config: hcl(`  group_chat_id = ` + group), PlanOnly: true, ExpectNonEmptyPlan: true},
+		resource.TestStep{Config: hcl(`  group_chat_id = ` + group), Check: resource.ComposeAggregateTestCheckFunc(
+			resource.TestCheckResourceAttr(addr, "group_chat_id", group), bound(fakeForumChatID))},
 	)
 }

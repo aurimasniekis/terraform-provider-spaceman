@@ -7,7 +7,7 @@ description: |-
 
 # spaceman_space_telegram (Resource)
 
-A space's Telegram settings (`/spaces/{id}/telegram`, SpaceMan ADR-0083). Telegram is opt-in per space: a space without these settings, or with `enabled = false`, is invisible to the bot and the Mini App. The resource describes the whole setting: an attribute left out takes its default. Needs `space_config:write` in the space and a step-up. Destroying the resource removes the settings, so Telegram is off for the space again. Import with the space ID.
+A space's Telegram settings (`/spaces/{id}/telegram`, SpaceMan ADR-0083). Telegram is opt-in per space: a space without these settings, or with `enabled = false`, is invisible to the bot and the Mini App. The resource describes the whole setting: an attribute left out takes its default. Needs `space_config:write` in the space and a step-up. Destroying the resource removes the settings, so Telegram is off for the space again, and unbinds the group. Import with the space ID.
 
 ## Example Usage
 

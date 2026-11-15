@@ -2,9 +2,9 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
-	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -51,7 +51,7 @@ func (r *spaceTelegramResource) Schema(_ context.Context, _ resource.SchemaReque
 		MarkdownDescription: "A space's Telegram settings (`/spaces/{id}/telegram`, SpaceMan ADR-0083). Telegram is opt-in per space: a space " +
 			"without these settings, or with `enabled = false`, is invisible to the bot and the Mini App. The resource describes the whole " +
 			"setting: an attribute left out takes its default. Needs `space_config:write` in the space and a step-up. Destroying the resource " +
-			"removes the settings, so Telegram is off for the space again. Import with the space ID.",
+			"removes the settings, so Telegram is off for the space again, and unbinds the group. Import with the space ID.",
 		Attributes: map[string]schema.Attribute{
 			"id":       idAttr("The space ID."),
 			"space_id": requiredReplace("The space."),
@@ -68,7 +68,7 @@ func (r *spaceTelegramResource) Schema(_ context.Context, _ resource.SchemaReque
 					"is (`0` when none). Set `0` to unbind. Changing it needs the admin permission `telegram_group:write` (besides " +
 					"`space_config:write`); the group must be a forum supergroup (topics turned on) the bot is a member of (422 otherwise), " +
 					"the bot must be running (503 otherwise) and a group serves one space only (409 when it is bound to another).",
-				Validators:    []validator.Int64{int64validator.AtMost(0)},
+				Validators:    []validator.Int64{supergroupChatID{}},
 				PlanModifiers: []planmodifier.Int64{int64planmodifier.UseStateForUnknown()}},
 		},
 	}
@@ -90,10 +90,31 @@ func (r *spaceTelegramResource) save(ctx context.Context, m *spaceTelegramModel,
 		Enabled: boolPtr(m.Enabled), ContentLevel: strPtr(m.ContentLevel), EnforcedApprovals: strPtr(m.EnforcedApprovals),
 		Topics: boolPtr(m.Topics), TerminalWatch: boolPtr(m.TerminalWatch), GroupChatID: group})
 	if err != nil {
+		var ae *client.APIError
+		if group != nil && errors.As(err, &ae) && ae.Status == 409 && ae.Code == "conflict" {
+			d.AddAttributeError(path.Root("group_chat_id"), "The group is bound to another space",
+				fmt.Sprintf("%s\n\nThis group is bound to another space; unbind it there first (set its group_chat_id to 0), then apply again.", err))
+			return nil, false
+		}
 		addAPIError(d, "Could not save the space's Telegram settings", err)
 		return nil, false
 	}
 	return s, true
+}
+
+// supergroupChatID accepts a negative supergroup chat ID, or 0 (unbind).
+type supergroupChatID struct{}
+
+func (supergroupChatID) Description(context.Context) string {
+	return "a negative supergroup chat ID, or 0 to unbind"
+}
+func (v supergroupChatID) MarkdownDescription(ctx context.Context) string { return v.Description(ctx) }
+func (v supergroupChatID) ValidateInt64(ctx context.Context, req validator.Int64Request, resp *validator.Int64Response) {
+	if req.ConfigValue.IsNull() || req.ConfigValue.IsUnknown() || req.ConfigValue.ValueInt64() <= 0 {
+		return
+	}
+	resp.Diagnostics.AddAttributeError(req.Path, "Invalid group chat ID",
+		fmt.Sprintf("group_chat_id must be %s, got %d.", v.Description(ctx), req.ConfigValue.ValueInt64()))
 }
 
 // groupChatIDPtr is what is sent: a configured value (0 unbinds), or nothing, so that central leaves the binding alone.
