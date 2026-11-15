@@ -28,7 +28,8 @@ resource "spaceman_telegram_bot" "this" {
   enabled = true
   mode    = "webhook" # or "polling"
 
-  # Optional: the Mini App's own host (not central's public host, no port or path).
+  # Optional: the Mini App's own host (not central's public host, no port or path). It takes effect only
+  # when central's telegram.miniapp_host is set to the same host.
   miniapp_host = "tg.central.example.com"
 
   # Optional: only accept webhook calls from Telegram's ranges. Safe only when the
@@ -48,7 +49,7 @@ resource "spaceman_telegram_bot" "this" {
 
 - `bot_token_wo_version` (Number) Change this number to send `bot_token_wo` again (rotation). Terraform never stores the write-only value, so it cannot see when the value itself changes.
 - `enabled` (Boolean) Whether central runs the bot (webhook or polling). Left out: kept as is (`false` on create). Set `false` explicitly to turn Telegram off and remove the webhook.
-- `miniapp_host` (String) The Mini App's own host: a lower-case DNS name such as `tg.central.example.com`, without scheme, port or path, not an IP address and not the host of central's public URL. Left out: kept as is (empty on create). Set `""` explicitly to turn the Mini App off.
+- `miniapp_host` (String) The Mini App's own host: a lower-case DNS name such as `tg.central.example.com`, without scheme, port or path, not an IP address and not the host of central's public URL. It takes effect only when central's `telegram.miniapp_host` (`SPACEMAN_TELEGRAM_MINIAPP_HOST`) is set to the same host; central refuses it otherwise. Left out: kept as is (empty on create). Set `""` explicitly to turn the Mini App off.
 - `mode` (String) How updates arrive: `webhook` (default; needs central's public URL to be https) or `polling` (outbound only).
 - `webhook_ip_allowlist` (Set of String) CIDRs (canonical form, e.g. `149.154.160.0/20`) the webhook accepts requests from, at most 32. Left out: kept as is (empty on create: no source check). Set `[]` explicitly to clear it. Only safe when the client address behind your proxy is trustworthy.
 

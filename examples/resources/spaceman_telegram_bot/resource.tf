@@ -12,7 +12,8 @@ resource "spaceman_telegram_bot" "this" {
   enabled = true
   mode    = "webhook" # or "polling"
 
-  # Optional: the Mini App's own host (not central's public host, no port or path).
+  # Optional: the Mini App's own host (not central's public host, no port or path). It takes effect only
+  # when central's telegram.miniapp_host is set to the same host.
   miniapp_host = "tg.central.example.com"
 
   # Optional: only accept webhook calls from Telegram's ranges. Safe only when the

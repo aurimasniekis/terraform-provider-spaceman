@@ -152,7 +152,9 @@ func (r *telegramBotResource) Schema(_ context.Context, _ resource.SchemaRequest
 			"mode": optString("How updates arrive: `webhook` (default; needs central's public URL to be https) or `polling` (outbound only).",
 				stringvalidator.OneOf("webhook", "polling")),
 			"miniapp_host": optString("The Mini App's own host: a lower-case DNS name such as `tg.central.example.com`, without scheme, port or "+
-				"path, not an IP address and not the host of central's public URL. Left out: kept as is (empty on create). Set `\"\"` "+
+				"path, not an IP address and not the host of central's public URL. It takes effect only when central's "+
+				"`telegram.miniapp_host` (`SPACEMAN_TELEGRAM_MINIAPP_HOST`) is set to the same host; central refuses it otherwise. "+
+				"Left out: kept as is (empty on create). Set `\"\"` "+
 				"explicitly to turn the Mini App off.", miniAppHost{}),
 			"webhook_ip_allowlist": schema.SetAttribute{Optional: true, Computed: true, ElementType: types.StringType,
 				MarkdownDescription: "CIDRs (canonical form, e.g. `149.154.160.0/20`) the webhook accepts requests from, at most 32. Left out: kept as is (empty on create: " +
