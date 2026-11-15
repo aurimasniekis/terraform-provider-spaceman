@@ -214,7 +214,7 @@ public_url: %s
 kek: {file: %s}
 http: {listen: "127.0.0.1:%d", management_listen: "127.0.0.1:%d"}
 log: {level: info, format: text}
-telegram: {api_base_url: %s}
+telegram: {api_base_url: %s, miniapp_host: tg.central.example.com}
 `, filepath.Join(dir, "central"), env.endpoint, filepath.Join(dir, "kek"), port, mport, env.telegram.URL)
 	if err := os.WriteFile(cfg, []byte(yaml), 0o600); err != nil {
 		return env, err
