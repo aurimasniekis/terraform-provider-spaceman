@@ -85,10 +85,10 @@ func (r *spaceTelegramResource) toModel(s *client.SpaceTelegram, m *spaceTelegra
 	m.GroupChatID = types.Int64Value(s.GroupChatID)
 }
 
-func (r *spaceTelegramResource) save(ctx context.Context, m *spaceTelegramModel, version int64, d *diagnostics) (*client.SpaceTelegram, bool) {
+func (r *spaceTelegramResource) save(ctx context.Context, m *spaceTelegramModel, version int64, group *int64, d *diagnostics) (*client.SpaceTelegram, bool) {
 	s, err := r.c.PutSpaceTelegram(ctx, m.SpaceID.ValueString(), version, client.SpaceTelegramInput{
 		Enabled: boolPtr(m.Enabled), ContentLevel: strPtr(m.ContentLevel), EnforcedApprovals: strPtr(m.EnforcedApprovals),
-		Topics: boolPtr(m.Topics), TerminalWatch: boolPtr(m.TerminalWatch), GroupChatID: groupChatIDPtr(m.GroupChatID)})
+		Topics: boolPtr(m.Topics), TerminalWatch: boolPtr(m.TerminalWatch), GroupChatID: group})
 	if err != nil {
 		addAPIError(d, "Could not save the space's Telegram settings", err)
 		return nil, false
@@ -121,7 +121,7 @@ func (r *spaceTelegramResource) Create(ctx context.Context, req resource.CreateR
 			fmt.Sprintf("Import them with `terraform import <address> %s`, or remove them in SpaceMan first.", m.SpaceID.ValueString()))
 		return
 	}
-	s, ok := r.save(ctx, &m, 0, &resp.Diagnostics)
+	s, ok := r.save(ctx, &m, 0, groupChatIDPtr(m.GroupChatID), &resp.Diagnostics)
 	if !ok {
 		return
 	}
@@ -164,7 +164,17 @@ func (r *spaceTelegramResource) Update(ctx context.Context, req resource.UpdateR
 		}
 		v = cur.Version
 	}
-	s, ok := r.save(ctx, &m, v, &resp.Diagnostics)
+	// An unchanged binding is not sent again: only a change needs telegram_group:write.
+	var prior spaceTelegramModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &prior)...)
+	group := groupChatIDPtr(m.GroupChatID)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if m.GroupChatID.Equal(prior.GroupChatID) {
+		group = nil
+	}
+	s, ok := r.save(ctx, &m, v, group, &resp.Diagnostics)
 	if !ok {
 		return
 	}
