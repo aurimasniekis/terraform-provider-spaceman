@@ -91,7 +91,9 @@ func (r *spaceTelegramResource) save(ctx context.Context, m *spaceTelegramModel,
 		Topics: boolPtr(m.Topics), TerminalWatch: boolPtr(m.TerminalWatch), GroupChatID: group})
 	if err != nil {
 		var ae *client.APIError
-		if group != nil && errors.As(err, &ae) && ae.Status == 409 && ae.Code == "conflict" {
+		// Central answers 409 conflict both for a stale version and for a group bound to another space; only when the
+		// version is still current is it the group (a failed re-read keeps the generic diagnostic with its re-plan hint).
+		if group != nil && errors.As(err, &ae) && ae.Status == 409 && ae.Code == "conflict" && r.versionUnchanged(ctx, m.SpaceID.ValueString(), version) {
 			d.AddAttributeError(path.Root("group_chat_id"), "The group is bound to another space",
 				fmt.Sprintf("%s\n\nThis group is bound to another space; unbind it there first (set its group_chat_id to 0), then apply again.", err))
 			return nil, false
@@ -100,6 +102,12 @@ func (r *spaceTelegramResource) save(ctx context.Context, m *spaceTelegramModel,
 		return nil, false
 	}
 	return s, true
+}
+
+// versionUnchanged reports whether the stored settings are still at version, so that a 409 is not a stale-version conflict.
+func (r *spaceTelegramResource) versionUnchanged(ctx context.Context, spaceID string, version int64) bool {
+	cur, err := r.c.GetSpaceTelegram(ctx, spaceID)
+	return err == nil && cur.Version == version
 }
 
 // supergroupChatID accepts a negative supergroup chat ID, or 0 (unbind).

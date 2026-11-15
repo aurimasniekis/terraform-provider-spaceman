@@ -54,6 +54,7 @@ type fakeSpaceTelegram struct {
 	puts   []map[string]any
 	status int
 	code   string
+	ver    int64 // the version GET and PUT answer with
 }
 
 func (f *fakeSpaceTelegram) start(t *testing.T) *spaceTelegramResource {
@@ -73,7 +74,7 @@ func (f *fakeSpaceTelegram) start(t *testing.T) *spaceTelegramResource {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"space_id": "spc_1", "stored": true, "enabled": true, "content_level": "full",
-			"enforced_approvals": "web_only", "group_chat_id": -1001})
+			"enforced_approvals": "web_only", "group_chat_id": -1001, "version": f.ver})
 	}))
 	t.Cleanup(srv.Close)
 	c, err := client.New(srv.URL, "tok", client.Options{})
@@ -96,13 +97,15 @@ func TestSpaceTelegramSaveGroupErrors(t *testing.T) {
 		status                              int
 		group                               *int64
 		wantAttr                            bool
+		storedVersion                       int64
 	}{
-		{"conflict", "conflict", "The group is bound to another space", "unbind it there first", 409, &g, true},
-		{"conflict without a group", "conflict", "Could not save", "Run `terraform plan` again", 409, nil, false},
-		{"unavailable", "unavailable", "Could not save", "unavailable", 503, &g, false},
+		{"conflict", "conflict", "The group is bound to another space", "unbind it there first", 409, &g, true, 1},
+		{"conflict without a group", "conflict", "Could not save", "Run `terraform plan` again", 409, nil, false, 1},
+		{"stale version with a group", "conflict", "Could not save", "Run `terraform plan` again", 409, &g, false, 2},
+		{"unavailable", "unavailable", "Could not save", "unavailable", 503, &g, false, 1},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			f := &fakeSpaceTelegram{status: c.status, code: c.code}
+			f := &fakeSpaceTelegram{status: c.status, code: c.code, ver: c.storedVersion}
 			r := f.start(t)
 			m := telegramModel(types.Int64Value(-1001))
 			var d diagnostics

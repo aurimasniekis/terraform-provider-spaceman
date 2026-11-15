@@ -470,6 +470,7 @@ resource "spaceman_space_telegram" "s" {
 		// A chat the bot is not a member of is refused, and the binding stays.
 		resource.TestStep{Config: hcl(`  group_chat_id = 5`), PlanOnly: true, ExpectError: regexp.MustCompile(`negative supergroup chat ID`)},
 		resource.TestStep{Config: hcl(`  group_chat_id = -1009999999999`), ExpectError: regexp.MustCompile(`not a member`)},
+		resource.TestStep{Config: hcl(`  group_chat_id = ` + group), PlanOnly: true},
 		resource.TestStep{Config: hcl(`  group_chat_id = ` + group), Check: resource.ComposeAggregateTestCheckFunc(
 			resource.TestCheckResourceAttr(addr, "group_chat_id", group), bound(fakeForumChatID))},
 		// Drift: the group is unbound through the API; with the attribute configured the plan shows a rebind, and applying restores it.
