@@ -242,6 +242,48 @@ removed {
 	)
 }
 
+// TestAccTelegramSettingsImportThenCrossField: after an import the stored values of the leaves left out of the
+// configuration are not what the next apply keeps (it stores only the configuration), so the cross-field check must use
+// the defaults for them. Stored idle=2000 with a configured absolute=1000 would fail; the apply resets idle to 900.
+func TestAccTelegramSettingsImportThenCrossField(t *testing.T) {
+	const addr = "spaceman_telegram_settings.this"
+	both := `
+resource "spaceman_telegram_settings" "this" {
+  miniapp_session_idle_seconds     = 2000
+  miniapp_session_absolute_seconds = 3000
+}
+`
+	onlyAbsolute := `
+resource "spaceman_telegram_settings" "this" {
+  miniapp_session_absolute_seconds = 1000
+}
+`
+	forget := `
+removed {
+  from = spaceman_telegram_settings.this
+  lifecycle {
+    destroy = false
+  }
+}
+`
+	accCase(t, func(*terraform.State) error { return nil },
+		resource.TestStep{Config: both, Check: resource.ComposeTestCheckFunc(
+			resource.TestCheckResourceAttr(addr, "miniapp_session_idle_seconds", "2000"),
+			resource.TestCheckResourceAttr(addr, "miniapp_session_absolute_seconds", "3000"))},
+		resource.TestStep{Config: forget},
+		resource.TestStep{Config: onlyAbsolute, ResourceName: addr, ImportState: true, ImportStateId: "telegram-settings", ImportStatePersist: true},
+		resource.TestStep{
+			Config: onlyAbsolute,
+			ConfigPlanChecks: resource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
+				plancheck.ExpectResourceAction(addr, plancheck.ResourceActionUpdate)}},
+			Check: resource.ComposeTestCheckFunc(
+				resource.TestCheckResourceAttr(addr, "miniapp_session_idle_seconds", "900"),
+				resource.TestCheckResourceAttr(addr, "miniapp_session_absolute_seconds", "1000")),
+		},
+		resource.TestStep{Config: onlyAbsolute, PlanOnly: true},
+	)
+}
+
 // TestAccTelegramSettingsPlanTime: out-of-range values and broken cross-field rules never reach SpaceMan (settings and
 // a space's settings).
 func TestAccTelegramSettingsPlanTime(t *testing.T) {

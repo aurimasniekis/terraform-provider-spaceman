@@ -164,7 +164,11 @@ func (r *telegramSettingsResource) ModifyPlan(ctx context.Context, req resource.
 		}
 	}
 
-	// effective is the value a leaf will have: ok is false when it cannot be known yet.
+	// effective is the value a leaf will have: ok is false when it cannot be known yet. A leaf left out of the
+	// configuration keeps its stored value only while no update is planned. Whenever one is (an import, which leaves no
+	// record of the configured leaves, plans one; so does taking a leaf out), the save stores only the configured leaves
+	// and SpaceMan's defaults fill the rest, so the stored value must not be used. Edge case: after an import where
+	// every leaf left out reverts, the checks run on the defaults, not on the imported values.
 	effective := func(key string) (attr.Value, bool) {
 		s := sides[key]
 		switch {
