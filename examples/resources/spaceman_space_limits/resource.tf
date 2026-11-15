@@ -12,5 +12,9 @@ resource "spaceman_space_limits" "payments" {
   terminal_cols = 200
   terminal_rows = 50
 
+  # At a usage limit: fail over to another bound account, and tell people only about waits longer than a day.
+  usage_limit_failover           = 1
+  usage_limit_notify_after_hours = 24
+
   on_lower = "drain"
 }
