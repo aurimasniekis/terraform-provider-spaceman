@@ -7,7 +7,7 @@ description: |-
 
 # spaceman_space_telegram (Resource)
 
-A space's Telegram settings (`/spaces/{id}/telegram`, SpaceMan ADR-0083). Telegram is opt-in per space: a space without these settings, or with `enabled = false`, is invisible to the bot and the Mini App. The resource describes the whole setting: an attribute left out takes its default. Needs `space_config:write` in the space and a step-up. Destroying the resource removes the settings, so Telegram is off for the space again. Import with the space ID.
+A space's Telegram settings (`/spaces/{id}/telegram`, SpaceMan ADR-0083). Telegram is opt-in per space: a space without these settings, or with `enabled = false`, is invisible to the bot and the Mini App. The resource describes the whole setting: an attribute left out takes its default. Needs `space_config:write` in the space and a step-up. Destroying the resource removes the settings, so Telegram is off for the space again, and unbinds the group. Import with the space ID.
 
 ## Example Usage
 
@@ -21,6 +21,10 @@ resource "spaceman_space_telegram" "payments" {
   enforced_approvals = "web_only" # or "confirm": decide enforced approvals in chat with a second confirmation
   topics             = true       # a topic of its own for users in topics mode
   terminal_watch     = false      # read-only terminal watching from the Mini App
+
+  # Group mode (optional; needs the admin permission telegram_group:write): bind a forum supergroup the bot is in.
+  # Left out, the binding is not managed; 0 unbinds.
+  group_chat_id = -1001234567890
 }
 ```
 
@@ -36,6 +40,7 @@ resource "spaceman_space_telegram" "payments" {
 
 - `content_level` (String) How much of the space Telegram shows: `full` (bodies in chat; default), `summary` (bodies only in the Mini App) or `off` (the space stays hidden, even when `enabled`).
 - `enforced_approvals` (String) Whether approvals that are enforced can be decided in chat with a second confirmation (`confirm`), or only on the web (`web_only`; default).
+- `group_chat_id` (Number) Group mode: the chat ID of the forum supergroup (a negative number such as `-1001234567890`) bound to the space, where members who linked their account can use the space's summaries. Left out: the binding is not managed and stays as it is (`0` when none). Set `0` to unbind. Changing it needs the admin permission `telegram_group:write` (besides `space_config:write`); the group must be a forum supergroup (topics turned on) the bot is a member of (422 otherwise), the bot must be running (503 otherwise) and a group serves one space only (409 when it is bound to another).
 - `terminal_watch` (Boolean) Whether a run's terminal can be watched (read-only) from the Mini App. Default `false`.
 - `topics` (Boolean) Whether the space gets its own topic for users in topics mode. Default `false`.
 

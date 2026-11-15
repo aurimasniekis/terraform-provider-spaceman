@@ -408,3 +408,87 @@ resource "spaceman_space_telegram" "s" {
 		resource.TestStep{ResourceName: addr, ImportState: true, ImportStateVerify: true},
 	)
 }
+
+// TestAccSpaceTelegramGroup: group_chat_id (group mode) against the fake Telegram. Left out it is unmanaged (the
+// binding stays), 0 unbinds, import reads it back, and a chat the bot is not in is refused (422).
+func TestAccSpaceTelegramGroup(t *testing.T) {
+	testAccPreCheck(t)
+	const addr = "spaceman_space_telegram.s"
+	slug := "tf-tgg-" + suffix()
+	group := fmt.Sprintf("%d", fakeForumChatID)
+	hcl := func(body string) string {
+		return fmt.Sprintf(`
+resource "spaceman_telegram_bot" "bot" {
+  bot_token_wo         = "3003:AAtfgroupsecret"
+  bot_token_wo_version = 1
+  enabled              = true
+  mode                 = "polling"
+}
+
+resource "spaceman_space" "s" {
+  slug             = %q
+  name             = "Telegram group"
+  node_id          = %q
+  purge_on_destroy = true
+}
+
+resource "spaceman_space_telegram" "s" {
+  depends_on = [spaceman_telegram_bot.bot]
+  space_id   = spaceman_space.s.id
+  enabled    = true
+%s
+}
+`, slug, acc.nodeA.ID, body)
+	}
+	bound := func(want int64) resource.TestCheckFunc {
+		return apiCheck(addr, func(ctx context.Context, c *client.Client, id string, _ *terraform.State) error {
+			s, err := c.GetSpaceTelegram(ctx, id)
+			if err != nil {
+				return err
+			}
+			if s.GroupChatID != want {
+				return fmt.Errorf("group_chat_id = %d, want %d", s.GroupChatID, want)
+			}
+			return nil
+		})
+	}
+	accCase(t, nil,
+		// Not managed: nothing is bound and the attribute reads 0.
+		resource.TestStep{Config: hcl(``), Check: resource.ComposeAggregateTestCheckFunc(
+			resource.TestCheckResourceAttr(addr, "group_chat_id", "0"), bound(0))},
+		resource.TestStep{Config: hcl(``), PlanOnly: true},
+		resource.TestStep{Config: hcl(`  group_chat_id = ` + group), Check: resource.ComposeAggregateTestCheckFunc(
+			resource.TestCheckResourceAttr(addr, "group_chat_id", group), bound(fakeForumChatID))},
+		// Left out again: the binding stays and the plan is empty.
+		resource.TestStep{Config: hcl(``), PlanOnly: true},
+		resource.TestStep{Config: hcl(`  content_level = "summary"`), Check: resource.ComposeAggregateTestCheckFunc(
+			resource.TestCheckResourceAttr(addr, "group_chat_id", group), bound(fakeForumChatID))},
+		resource.TestStep{Config: hcl(`  group_chat_id = 0`), Check: resource.ComposeAggregateTestCheckFunc(
+			resource.TestCheckResourceAttr(addr, "group_chat_id", "0"), bound(0))},
+		resource.TestStep{Config: hcl(`  group_chat_id = ` + group), Check: bound(fakeForumChatID)},
+		resource.TestStep{ResourceName: addr, ImportState: true, ImportStateVerify: true},
+		// A chat the bot is not a member of is refused, and the binding stays.
+		resource.TestStep{Config: hcl(`  group_chat_id = 5`), PlanOnly: true, ExpectError: regexp.MustCompile(`negative supergroup chat ID`)},
+		resource.TestStep{Config: hcl(`  group_chat_id = -1009999999999`), ExpectError: regexp.MustCompile(`not a member`)},
+		resource.TestStep{Config: hcl(`  group_chat_id = ` + group), PlanOnly: true},
+		resource.TestStep{Config: hcl(`  group_chat_id = ` + group), Check: resource.ComposeAggregateTestCheckFunc(
+			resource.TestCheckResourceAttr(addr, "group_chat_id", group), bound(fakeForumChatID))},
+		// Drift: the group is unbound through the API; with the attribute configured the plan shows a rebind, and applying restores it.
+		resource.TestStep{
+			PreConfig: func() {
+				ctx := context.Background()
+				id := spaceIDBySlug(t, slug)
+				cur, err := acc.client.GetSpaceTelegram(ctx, id)
+				if err != nil {
+					t.Fatal(err)
+				}
+				zero := int64(0)
+				if _, err := acc.client.PutSpaceTelegram(ctx, id, cur.Version, client.SpaceTelegramInput{GroupChatID: &zero}); err != nil {
+					t.Fatal(err)
+				}
+			},
+			Config: hcl(`  group_chat_id = ` + group), PlanOnly: true, ExpectNonEmptyPlan: true},
+		resource.TestStep{Config: hcl(`  group_chat_id = ` + group), Check: resource.ComposeAggregateTestCheckFunc(
+			resource.TestCheckResourceAttr(addr, "group_chat_id", group), bound(fakeForumChatID))},
+	)
+}
