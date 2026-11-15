@@ -5,21 +5,28 @@ All notable changes to this provider are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-11-15
+
+Feature release, released with SpaceMan 0.1.5: the Telegram resources, the bot (`spaceman_telegram_bot`), the policy and
+defaults (`spaceman_telegram_settings`), a space's opt-in (`spaceman_space_telegram`, with `group_chat_id` for group mode).
+It requires SpaceMan 0.1.5 or later and Terraform 1.11 or later, as before. The provider skips 0.1.4 so that its version
+matches SpaceMan's: this release is 0.1.5 for both.
+
 ### Added
 - `spaceman_telegram_bot`: central's Telegram bot (SpaceMan ADR-0083), a singleton with the import ID `telegram-bot`.
   The token is write-only (`bot_token_wo` with `bot_token_wo_version`): never stored in state. `enabled`, `mode`
   (`webhook` or `polling`), `miniapp_host` and `webhook_ip_allowlist` (canonical CIDRs, at most 32) are managed; `bot_id`,
   `username`, `has_token`, `token_version` and `webhook_status` are computed. Destroy removes the webhook and the stored
-  token. Needs a SpaceMan release that ships the Telegram bot operations.
+  token. Needs SpaceMan 0.1.5 or later.
 - `spaceman_telegram_settings`: the policy and defaults of the Telegram bot (`/telegram/settings`), a singleton with the import
   ID `telegram-settings`: link policy (default cap, admin cap, SSO grants, reconfirm interval, links per user, link code
   lifetime), Mini App lifetimes, `send_limits`, `inbound_limits`, `notification_defaults` and `topics_mode_default`. Every
   attribute is optional and out-of-range values fail at plan time; destroy resets everything to SpaceMan's defaults.
 - `spaceman_space_telegram`: a space's Telegram opt-in (`/spaces/{id}/telegram`): `enabled`, `content_level`,
   `enforced_approvals`, `topics` and `terminal_watch`. Destroy turns Telegram off for the space. Import with the space ID.
-  Both need a SpaceMan release that ships the Telegram settings operations.
+  Both need SpaceMan 0.1.5 or later.
 - `spaceman_space_telegram.group_chat_id`: binds a forum supergroup (group mode) to the space; left out it is not managed, `0`
-  unbinds, import reads it back. Needs the admin permission `telegram_group:write` and a SpaceMan release that ships group mode.
+  unbinds, import reads it back. Needs the admin permission `telegram_group:write` and SpaceMan 0.1.5 or later.
 
 ## [0.1.3] - 2026-11-14
 
@@ -228,7 +235,8 @@ First release candidate (pre-release; not production-ready, see SpaceMan's docs/
 - `spaceman_human_action_policy`: `response_inbox` (`off`, `routed` or `always`), whether a response also becomes an
   inbox item (SpaceMan SM-INBOX-001, ADR-0049). Without the attribute, the provider's writes reset the policy to `off`.
 
-[Unreleased]: https://github.com/aurimasniekis/terraform-provider-spaceman/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/aurimasniekis/terraform-provider-spaceman/compare/v0.1.5...HEAD
+[0.1.5]: https://github.com/aurimasniekis/terraform-provider-spaceman/compare/v0.1.3...v0.1.5
 [0.1.3]: https://github.com/aurimasniekis/terraform-provider-spaceman/releases/tag/v0.1.3
 [0.1.2]: https://github.com/aurimasniekis/terraform-provider-spaceman/releases/tag/v0.1.2
 [0.1.1]: https://github.com/aurimasniekis/terraform-provider-spaceman/releases/tag/v0.1.1
