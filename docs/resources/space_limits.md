@@ -26,6 +26,10 @@ resource "spaceman_space_limits" "payments" {
   terminal_cols = 200
   terminal_rows = 50
 
+  # At a usage limit: fail over to another bound account, and tell people only about waits longer than a day.
+  usage_limit_failover           = 1
+  usage_limit_notify_after_hours = 24
+
   on_lower = "drain"
 }
 ```
@@ -64,6 +68,10 @@ resource "spaceman_space_limits" "payments" {
 - `task_deadline_minutes` (Number) How long a top-level task may run before control and the operators are told (0-43200; 0: none; never stops a task). Unset: not managed (the installation default or an override set elsewhere applies).
 - `terminal_cols` (Number) Width new runs' terminals are held at, in columns (40-400; 0: the node's default size, its `runner.terminal_size`). A size applies only when `terminal_rows` is set too (both non-zero); runs already started keep their size. Changing it needs `terminal:takeover` (space admins). Requires SpaceMan 0.1.1 or later (ADR-0075). Unset: not managed (the installation default or an override set elsewhere applies).
 - `terminal_rows` (Number) Height new runs' terminals are held at, in rows (10-200; 0: the node's default size). A size applies only when `terminal_cols` is set too (both non-zero); runs already started keep their size. Changing it needs `terminal:takeover` (space admins). Requires SpaceMan 0.1.1 or later. Unset: not managed (the installation default or an override set elsewhere applies).
+- `usage_limit_failover` (Number) Let a launch or resume whose account is held at a usage limit use another account bound to the space for the same harness that is not held (1: on, 0: off, SpaceMan's default). A space routed through an LLM gateway never falls back to a direct account. Requires a SpaceMan version with usage limits (ADR-0079). Unset: not managed (the installation default or an override set elsewhere applies).
+- `usage_limit_keep_alive_max_minutes` (Number) Minutes a run at a usage limit waits for the reset with its process kept alive before it is stopped and parked; also the longest gap between checks of a hold whose reset time is unknown (1-1440; SpaceMan's default 360). Requires a SpaceMan version with usage limits. Unset: not managed (the installation default or an override set elsewhere applies).
+- `usage_limit_max_wait_hours` (Number) Hours a worker or diagnostic run parked at a usage limit waits to be resumed before its task goes back to the queue, ready and unassigned; control is never given up on (1-720; SpaceMan's default 168, 7 days). A wait already parked keeps its release time. Requires a SpaceMan version with usage limits. Unset: not managed (the installation default or an override set elsewhere applies).
+- `usage_limit_notify_after_hours` (Number) Hours away the reset of an account held at a usage limit must be for the space's people to get one human action about it, once per account window (0-720; 0: never; SpaceMan's default 12, so weekly limits, not 5-hour ones). Requires a SpaceMan version with usage limits. Unset: not managed (the installation default or an override set elsewhere applies).
 
 ### Read-Only
 
