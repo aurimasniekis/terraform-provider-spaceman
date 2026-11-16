@@ -12,4 +12,6 @@ resource "spaceman_space_limits" "payments" {
   # Usage-limit failover (needs SpaceMan with account pools).
   usage_limit_wait_if_reset_within = 15
   usage_limit_min_headroom_percent = 10
+  usage_limit_failover             = 1
+  usage_limit_switch_max_per_day   = 6
 }

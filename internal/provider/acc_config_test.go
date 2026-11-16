@@ -98,7 +98,7 @@ func TestAccLimits(t *testing.T) {
 	testAccPreCheck(t)
 	slug := "tf-lim-" + suffix()
 	l1 := "  max_concurrent_runs = 4\n  support_depth = 2\n  on_lower = \"stop\""
-	l2 := "  max_concurrent_runs = 6\n  budget_warn_percent = 50\n  usage_limit_wait_if_reset_within = 30\n  usage_limit_min_headroom_percent = 10\n  retention_attachments_days = 30\n  on_lower = \"stop\""
+	l2 := "  max_concurrent_runs = 6\n  budget_warn_percent = 50\n  usage_limit_wait_if_reset_within = 30\n  usage_limit_min_headroom_percent = 10\n  usage_limit_failover = 1\n  usage_limit_switch_max_per_day = 3\n  retention_attachments_days = 30\n  on_lower = \"stop\""
 	q1 := "  max_top_level_tasks = 3"
 	q2 := q1 + "\n  incident_triggers  = [\"operator\", \"template:pagerduty\"]\n  incident_untrusted = \"refuse\"\n  incident_workers   = \"pause\"" +
 		"\n  incident_capacity  = 1\n  incident_resume    = \"auto\""

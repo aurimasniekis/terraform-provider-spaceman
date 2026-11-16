@@ -6,12 +6,15 @@ All notable changes to this provider are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
-- Account switching at a usage limit (SpaceMan ADR-0090). `spaceman_space_limits` manages
+- Account switching at a usage limit (SpaceMan ADR-0079, ADR-0090). `spaceman_space_limits` manages
+  `usage_limit_failover` (1: on, 0: off), `usage_limit_switch_max_per_day` (0-50; default 6),
   `usage_limit_wait_if_reset_within` (minutes; a run waits for a reset this near instead of moving to another account)
   and `usage_limit_min_headroom_percent` (a launch skips an account with less than this share of a window left; 0:
-  off). `spaceman_space_accounts` bindings take a `priority` (pool order, lower first, default 100), and the new
-  `spaceman_space_role_pool` limits one role to its own accounts. All are optional, so values set elsewhere are not
-  drift. Needs the SpaceMan release after 0.1.0-rc.8.
+  off). These four limits are optional only, so values set elsewhere are not drift. `spaceman_space_accounts`
+  bindings take a `priority` (pool order, lower first, 1-1000): it is authoritative like the rest of the binding set,
+  so an omitted priority resets to 100, as the binding set always did. The new `spaceman_space_role_pool` limits one
+  role to its own accounts; it retries when the space's account configuration changes during the apply, and the
+  accounts must be bound first (`depends_on`). Needs the SpaceMan release after 0.1.0-rc.8.
 
 ## [0.1.0-rc.8] - 2026-11-06
 

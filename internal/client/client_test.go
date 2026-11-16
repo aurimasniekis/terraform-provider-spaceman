@@ -270,6 +270,18 @@ func TestSetSpaceAccountsSendsOnlyBindingFields(t *testing.T) {
 	}
 }
 
+func TestSetSpaceAccountsDefaultPriorityOmitted(t *testing.T) {
+	f := &fakeAPI{resp: []func(http.ResponseWriter){jsonResp(http.StatusOK, map[string]any{"items": []AccountBinding{}})}}
+	c := newTest(t, f)
+	bs := []AccountBinding{{AccountID: "acc_1", Priority: 100}, {AccountID: "acc_2"}}
+	if _, err := c.SetSpaceAccounts(context.Background(), "spc_1", bs); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(f.reqs[0].body, "priority") {
+		t.Fatalf("body = %q: priority 100 or 0 must send no key (older SpaceMan rejects unknown fields)", f.reqs[0].body)
+	}
+}
+
 func TestAccountPoolRequests(t *testing.T) {
 	f := &fakeAPI{resp: []func(http.ResponseWriter){
 		jsonResp(http.StatusOK, map[string]any{"items": []AccountBinding{}, "accounts_version": 2}),

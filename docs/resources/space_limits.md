@@ -26,6 +26,8 @@ resource "spaceman_space_limits" "payments" {
   # Usage-limit failover (needs SpaceMan with account pools).
   usage_limit_wait_if_reset_within = 15
   usage_limit_min_headroom_percent = 10
+  usage_limit_failover             = 1
+  usage_limit_switch_max_per_day   = 6
 }
 ```
 
@@ -61,7 +63,9 @@ resource "spaceman_space_limits" "payments" {
 - `storage_quota_bytes` (Number) Attachment bytes stored for the space (1 MiB-1 TiB). Unset: not managed (the installation default or an override set elsewhere applies).
 - `support_depth` (Number) How deep support may nest (1-3; 1: a KB session cannot ask a knowledge base). Unset: not managed (the installation default or an override set elsewhere applies).
 - `task_deadline_minutes` (Number) How long a top-level task may run before control and the operators are told (0-43200; 0: none; never stops a task). Unset: not managed (the installation default or an override set elsewhere applies).
+- `usage_limit_failover` (Number) Usage-limit failover (SpaceMan ADR-0079, ADR-0090): 1: a launch, a resume and a live run whose account reaches its limit move to the next eligible account of the pool; 0: off (SpaceMan's default). Only 0 and 1. Unset: not managed (the installation default or an override set elsewhere applies).
 - `usage_limit_min_headroom_percent` (Number) Percent: a new run does not start on an account when a window with known usage leaves less than this share free; it uses the pool's next eligible account (0-100; 0: off; running agents are never moved for it; SpaceMan ADR-0090). Unset: not managed (the installation default or an override set elsewhere applies).
+- `usage_limit_switch_max_per_day` (Number) How many times one run may be moved to another account in a day when failover is on (0-50; SpaceMan's default 6). Unset: not managed (the installation default or an override set elsewhere applies).
 - `usage_limit_wait_if_reset_within` (Number) Minutes: with usage-limit failover on, a run whose account reaches its usage limit waits for the reset instead of moving to another account of its pool when the reset is this near (0-1440; SpaceMan ADR-0090; default 15). Unset: not managed (the installation default or an override set elsewhere applies).
 
 ### Read-Only
