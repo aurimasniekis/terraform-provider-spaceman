@@ -52,6 +52,8 @@ var spaceLimitAttrs = []limitAttr{
 	{"retention_human_actions_days", "Days a resolved, cancelled or expired human action is kept (0-36500; 0: kept); kept while open work refers to it. Needs `retention:write`."},
 	{"control_autostart", "Start the space's control role when work waits for control and no control run is live, resuming the last control's session (1: on, 0: off; SpaceMan ADR-0056)."},
 	{"control_idle_stop_minutes", "Minutes control may sit idle before SpaceMan stops it; the next waiting work starts it again (0-10080; 0: never)."},
+	{"usage_limit_wait_if_reset_within", "Minutes: with usage-limit failover on, a run whose account reaches its usage limit waits for the reset instead of moving to another account of its pool when the reset is this near (0-1440; SpaceMan ADR-0090; default 15)."},
+	{"usage_limit_min_headroom_percent", "Percent: a new run does not start on an account when a window with known usage leaves less than this share free; it uses the pool's next eligible account (0-100; 0: off; running agents are never moved for it; SpaceMan ADR-0090)."},
 }
 
 // ---- space limits ----

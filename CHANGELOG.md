@@ -5,6 +5,14 @@ All notable changes to this provider are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- Account switching at a usage limit (SpaceMan ADR-0090). `spaceman_space_limits` manages
+  `usage_limit_wait_if_reset_within` (minutes; a run waits for a reset this near instead of moving to another account)
+  and `usage_limit_min_headroom_percent` (a launch skips an account with less than this share of a window left; 0:
+  off). `spaceman_space_accounts` bindings take a `priority` (pool order, lower first, default 100), and the new
+  `spaceman_space_role_pool` limits one role to its own accounts. All are optional, so values set elsewhere are not
+  drift. Needs the SpaceMan release after 0.1.0-rc.8.
+
 ## [0.1.0-rc.8] - 2026-11-06
 
 Eighth release candidate, released with SpaceMan 0.1.0-rc.8: shared Git SSH keys.

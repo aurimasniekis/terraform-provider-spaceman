@@ -121,6 +121,7 @@ func (p *spacemanProvider) Resources(context.Context) []func() resource.Resource
 		newSpaceResource,
 		newSpaceRoleResource,
 		newSpaceAccountsResource,
+		newSpaceRolePoolResource,
 		newSpaceRepositoryResource,
 		newGitKeyResource,
 		newAccountResource,

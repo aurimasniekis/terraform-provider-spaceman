@@ -15,8 +15,8 @@ The accounts a space's runs may use (`GET/PUT /spaces/{id}/accounts`). This reso
 resource "spaceman_space_accounts" "payments" {
   space_id = spaceman_space.payments.id
   binding = [
-    { account_id = spaceman_account.claude.id, default = true },
-    { account_id = spaceman_account.openai.id },
+    { account_id = spaceman_account.claude.id, default = true, priority = 10 },
+    { account_id = spaceman_account.openai.id, priority = 20 },
   ]
 }
 ```
@@ -43,6 +43,7 @@ resource "spaceman_space_accounts" "payments" {
 ### Optional
 
 - `default` (Boolean) The account the space's runs of its harness use unless a launch names another.
+- `priority` (Number) Pool order for usage-limit failover (SpaceMan ADR-0090): when a run's account reaches its limit, the run moves to the pool's next eligible account, lower first (1-1000; default 100).
 
 ## Import
 

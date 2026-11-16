@@ -8,4 +8,8 @@ resource "spaceman_space_limits" "payments" {
   budget_tokens_24h      = 20000000
   budget_warn_percent    = 75
   on_lower               = "drain"
+
+  # Usage-limit failover (needs SpaceMan with account pools).
+  usage_limit_wait_if_reset_within = 15
+  usage_limit_min_headroom_percent = 10
 }

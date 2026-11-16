@@ -152,10 +152,42 @@ func (c *Client) SpaceAccounts(ctx context.Context, spaceID string) ([]AccountBi
 func (c *Client) SetSpaceAccounts(ctx context.Context, spaceID string, bs []AccountBinding) ([]AccountBinding, error) {
 	in := items[map[string]any]{Items: []map[string]any{}}
 	for _, b := range bs {
-		in.Items = append(in.Items, map[string]any{"account_id": b.AccountID, "default": b.Default})
+		item := map[string]any{"account_id": b.AccountID, "default": b.Default}
+		// 100 is SpaceMan's default: leaving it out keeps the request valid for a SpaceMan without account pools.
+		if b.Priority != 0 && b.Priority != 100 {
+			item["priority"] = b.Priority
+		}
+		in.Items = append(in.Items, item)
 	}
 	var out items[AccountBinding]
 	return out.Items, c.put(ctx, "/spaces/"+esc(spaceID)+"/accounts", 0, in, &out)
+}
+
+// RolePools is GET /spaces/{id}/account-pools: the role pools and the version of the space's account configuration.
+func (c *Client) RolePools(ctx context.Context, spaceID string) ([]RolePool, int64, error) {
+	var out struct {
+		Items   []RolePool `json:"items"`
+		Version int64      `json:"accounts_version"`
+	}
+	err := c.get(ctx, "/spaces/"+esc(spaceID)+"/account-pools", &out)
+	return out.Items, out.Version, err
+}
+
+// SetRolePool is PUT /spaces/{id}/account-pools/{role} (replaces the role's pool; no entries remove it, so the role
+// uses the space's pool again). version is the space's accounts_version; SpaceMan requires If-Match.
+func (c *Client) SetRolePool(ctx context.Context, spaceID, role string, version int64, entries []PoolEntry) ([]RolePool, int64, error) {
+	in := struct {
+		Items []map[string]any `json:"items"`
+	}{Items: []map[string]any{}}
+	for _, e := range entries {
+		in.Items = append(in.Items, map[string]any{"account_id": e.AccountID, "priority": e.Priority})
+	}
+	var out struct {
+		Items   []RolePool `json:"items"`
+		Version int64      `json:"accounts_version"`
+	}
+	err := c.put(ctx, "/spaces/"+esc(spaceID)+"/account-pools/"+esc(role), version, in, &out)
+	return out.Items, out.Version, err
 }
 
 // ---- harness profiles, role templates, space roles ----

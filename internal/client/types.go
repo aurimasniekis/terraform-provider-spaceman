@@ -145,6 +145,21 @@ type AccountBinding struct {
 	Harness   string `json:"harness,omitempty"`
 	Name      string `json:"name,omitempty"`
 	Enabled   bool   `json:"enabled,omitempty"`
+	// Priority is the pool order for usage-limit failover, lower first; SpaceMan stores 100 for 0 or omitted.
+	Priority int64 `json:"priority,omitempty"`
+}
+
+// PoolEntry is one account of a role pool.
+type PoolEntry struct {
+	AccountID string `json:"account_id"`
+	Name      string `json:"name,omitempty"`
+	Priority  int64  `json:"priority,omitempty"`
+}
+
+// RolePool is the accounts one role of a space is limited to (replacing the space's pool for that role).
+type RolePool struct {
+	Role  string      `json:"role"`
+	Items []PoolEntry `json:"items"`
 }
 
 // SkillRef assigns a skill (following its latest version, or pinned to one).

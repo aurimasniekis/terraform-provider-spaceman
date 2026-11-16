@@ -52,6 +52,25 @@ func TestMergeLimits(t *testing.T) {
 	}
 }
 
+// The usage-limit failover limits are optional only: an override set elsewhere is kept while the configuration leaves
+// them out (no drift), and the configuration owns one only once it sets it.
+func TestMergeLimitsUsageLimitSwitching(t *testing.T) {
+	current := map[string]int64{"usage_limit_wait_if_reset_within": 5, "usage_limit_min_headroom_percent": 20}
+	if got := mergeLimits(current, nulls(), nulls()); got["usage_limit_wait_if_reset_within"] != 5 || got["usage_limit_min_headroom_percent"] != 20 {
+		t.Fatalf("unmanaged overrides changed: %v", got)
+	}
+	prior, plan := nulls(), nulls()
+	plan["usage_limit_wait_if_reset_within"] = i64(30)
+	got := mergeLimits(current, prior, plan)
+	if got["usage_limit_wait_if_reset_within"] != 30 || got["usage_limit_min_headroom_percent"] != 20 {
+		t.Fatalf("merged = %v", got)
+	}
+	prior["usage_limit_wait_if_reset_within"] = i64(30)
+	if got := mergeLimits(got, prior, nulls()); len(got) != 1 || got["usage_limit_min_headroom_percent"] != 20 {
+		t.Fatalf("removing the owned limit = %v", got)
+	}
+}
+
 func TestMergeOnLower(t *testing.T) {
 	for _, tc := range []struct {
 		current     string
@@ -102,7 +121,7 @@ func TestLimitAttributes(t *testing.T) {
 		}
 		seen[l.key] = true
 	}
-	if len(seen) != 22 || seen["max_top_level_tasks"] {
+	if len(seen) != 24 || seen["max_top_level_tasks"] {
 		t.Fatalf("limits = %v", seen)
 	}
 }

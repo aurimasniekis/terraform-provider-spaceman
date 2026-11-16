@@ -211,7 +211,15 @@ resource "spaceman_space_accounts" "b" {
   binding = [{
     account_id = spaceman_account.a.id
     default    = true
+    priority   = 20
   }]
+}
+
+resource "spaceman_space_role_pool" "p" {
+  space_id   = spaceman_space.s.id
+  role       = "worker"
+  account    = [{ account_id = spaceman_account.a.id }]
+  depends_on = [spaceman_space_accounts.b]
 }
 `, spaceSlug, nodeID, name, secret, version)
 }
@@ -230,6 +238,8 @@ func TestAccAccount(t *testing.T) {
 				resource.TestCheckNoResourceAttr("spaceman_account.a", "secret_wo"),
 				resource.TestCheckResourceAttr("spaceman_space_accounts.b", "binding.#", "1"),
 				resource.TestCheckResourceAttr("spaceman_space_accounts.b", "binding.0.default", "true"),
+				resource.TestCheckResourceAttr("spaceman_space_accounts.b", "binding.0.priority", "20"),
+				resource.TestCheckResourceAttr("spaceman_space_role_pool.p", "account.0.priority", "100"),
 			),
 		},
 		// A new secret without a new version is not sent: Terraform cannot see write-only values.
@@ -244,6 +254,9 @@ func TestAccAccount(t *testing.T) {
 		},
 		resource.TestStep{
 			ResourceName: "spaceman_space_accounts.b", ImportState: true, ImportStateVerify: true,
+		},
+		resource.TestStep{
+			ResourceName: "spaceman_space_role_pool.p", ImportState: true, ImportStateVerify: true,
 		},
 		// A binding removed elsewhere is drift for the authoritative binding set.
 		resource.TestStep{
