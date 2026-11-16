@@ -51,6 +51,7 @@ resource "spaceman_telegram_settings" "this" {
     failed_runs       = "digest"
     digest            = true
     digest_time       = "09:00"
+    threads           = "auto" # auto, on or off
     quiet_hours       = true
     quiet_hours_start = "23:00"
     quiet_hours_end   = "08:00"

@@ -65,6 +65,7 @@ resource "spaceman_telegram_settings" "this" {
     failed_runs       = "digest"
     digest            = true
     digest_time       = "09:00"
+    threads           = "auto" # auto, on or off
     quiet_hours       = true
     quiet_hours_start = "23:00"
     quiet_hours_end   = "08:00"
@@ -126,6 +127,7 @@ resource "spaceman_telegram_settings" "this" {
 - `quiet_hours_start` (String) Quiet hours start, in the user's time zone. Default `23:00`. (`HH:MM`, 24 hours)
 - `reminders` (String) Reminders of pending actions: `push`, `digest` or `off`. Default `push`.
 - `tasks_in_review` (String) Tasks entering review: `push`, `digest` or `off`. Default `digest`.
+- `threads` (String) The chat layout of a link: `auto`, `on` or `off`. A user can override it for their own link. Default `auto`.
 
 <a id="nestedatt--send_limits"></a>
 ### Nested Schema for `send_limits`
