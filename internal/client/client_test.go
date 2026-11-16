@@ -270,6 +270,46 @@ func TestSetSpaceAccountsSendsOnlyBindingFields(t *testing.T) {
 	}
 }
 
+func TestSetSpaceAccountsDefaultPriorityOmitted(t *testing.T) {
+	f := &fakeAPI{resp: []func(http.ResponseWriter){jsonResp(http.StatusOK, map[string]any{"items": []AccountBinding{}})}}
+	c := newTest(t, f)
+	bs := []AccountBinding{{AccountID: "acc_1", Priority: 100}, {AccountID: "acc_2"}}
+	if _, err := c.SetSpaceAccounts(context.Background(), "spc_1", bs); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(f.reqs[0].body, "priority") {
+		t.Fatalf("body = %q: priority 100 or 0 must send no key (older SpaceMan rejects unknown fields)", f.reqs[0].body)
+	}
+}
+
+func TestAccountPoolRequests(t *testing.T) {
+	f := &fakeAPI{resp: []func(http.ResponseWriter){
+		jsonResp(http.StatusOK, map[string]any{"items": []AccountBinding{}, "accounts_version": 2}),
+		jsonResp(http.StatusOK, map[string]any{"items": []RolePool{{Role: "worker", Items: []PoolEntry{{AccountID: "acc_1", Priority: 10}}}}, "accounts_version": 3}),
+		jsonResp(http.StatusOK, map[string]any{"items": []RolePool{{Role: "worker", Items: []PoolEntry{{AccountID: "acc_1", Priority: 10}}}}, "accounts_version": 4}),
+	}}
+	c := newTest(t, f)
+	ctx := context.Background()
+	if _, err := c.SetSpaceAccounts(ctx, "spc_1", []AccountBinding{{AccountID: "acc_1", Default: true, Priority: 5}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.reqs[0].body; !strings.Contains(got, `"priority":5`) {
+		t.Fatalf("bindings body = %q (priority missing)", got)
+	}
+	pools, v, err := c.RolePools(ctx, "spc_1")
+	if err != nil || v != 3 || len(pools) != 1 || pools[0].Items[0].Priority != 10 {
+		t.Fatalf("RolePools = %v, %d, %v", pools, v, err)
+	}
+	if _, v, err = c.SetRolePool(ctx, "spc_1", "worker", 3, []PoolEntry{{AccountID: "acc_1", Priority: 10}}); err != nil || v != 4 {
+		t.Fatalf("SetRolePool = %d, %v", v, err)
+	}
+	r := f.reqs[2]
+	if r.method != http.MethodPut || r.path != "/api/v1/spaces/spc_1/account-pools/worker" || r.ifMatch == "" ||
+		!strings.Contains(r.body, `"account_id":"acc_1"`) || !strings.Contains(r.body, `"priority":10`) {
+		t.Fatalf("SetRolePool request = %+v", r)
+	}
+}
+
 func TestDraftHelpers(t *testing.T) {
 	p := &Prompt{Versions: []*PromptVersion{{ID: "d", State: "draft"}, {ID: "v2", State: "published", Number: 2}, {ID: "v1", State: "published", Number: 1}}}
 	if p.Draft().ID != "d" || p.LatestPublished().ID != "v2" {

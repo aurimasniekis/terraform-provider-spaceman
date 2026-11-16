@@ -61,6 +61,9 @@ var spaceLimitAttrs = []limitAttr{
 	{"usage_limit_failover", "Let a launch or resume whose account is held at a usage limit use another account bound to the space for " +
 		"the same harness that is not held (1: on, 0: off, SpaceMan's default). A space routed through an LLM gateway never falls back to a " +
 		"direct account. Requires a SpaceMan version with usage limits (ADR-0079)."},
+	{"usage_limit_switch_max_per_day", "How many times one run may be moved to another account in a day when failover is on (0-50; SpaceMan's default 6). Requires SpaceMan 0.1.8 or later (ADR-0090)."},
+	{"usage_limit_wait_if_reset_within", "Minutes: with usage-limit failover on, a run whose account reaches its usage limit waits for the reset instead of moving to another account of its pool when the reset is this near (0-1440; SpaceMan's default 15). Requires SpaceMan 0.1.8 or later."},
+	{"usage_limit_min_headroom_percent", "Percent: a new run does not start on an account when a window with known usage leaves less than this share free; it uses the pool's next eligible account (0-100; 0: off; running agents are never moved for it). Requires SpaceMan 0.1.8 or later."},
 	{"usage_limit_keep_alive_max_minutes", "Minutes a run at a usage limit waits for the reset with its process kept alive before it is " +
 		"stopped and parked; also the longest gap between checks of a hold whose reset time is unknown (1-1440; SpaceMan's default 360). " +
 		"Requires a SpaceMan version with usage limits."},
@@ -83,6 +86,9 @@ var limitChecks = map[string]validator.Int64{
 	"usage_limit_keep_alive_max_minutes": int64validator.Between(1, 1440),
 	"usage_limit_max_wait_hours":         int64validator.Between(1, 720),
 	"usage_limit_notify_after_hours":     int64validator.Between(0, 720),
+	"usage_limit_switch_max_per_day":     int64validator.Between(0, 50),
+	"usage_limit_wait_if_reset_within":   int64validator.Between(0, 1440),
+	"usage_limit_min_headroom_percent":   int64validator.Between(0, 100),
 }
 
 // zeroOrBetween accepts 0 or a value within min..max (SpaceMan's terminal size limits: 0 is the node's default).

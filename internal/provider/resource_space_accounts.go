@@ -3,12 +3,15 @@ package provider
 import (
 	"context"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/aurimasniekis/terraform-provider-spaceman/internal/client"
@@ -19,11 +22,23 @@ type spaceAccountsResource struct{ base }
 
 func newSpaceAccountsResource() resource.Resource { return &spaceAccountsResource{} }
 
-var bindingType = types.ObjectType{AttrTypes: map[string]attr.Type{"account_id": types.StringType, "default": types.BoolType}}
+var bindingType = types.ObjectType{AttrTypes: map[string]attr.Type{"account_id": types.StringType, "default": types.BoolType, "priority": types.Int64Type}}
+
+// defaultPoolPriority is the priority SpaceMan stores when none is given.
+const defaultPoolPriority = 100
+
+// poolPriority maps SpaceMan's 0 (never returned, but accepted as "omitted") to the default.
+func poolPriority(p int64) int64 {
+	if p == 0 {
+		return defaultPoolPriority
+	}
+	return p
+}
 
 type bindingModel struct {
 	AccountID types.String `tfsdk:"account_id"`
 	Default   types.Bool   `tfsdk:"default"`
+	Priority  types.Int64  `tfsdk:"priority"`
 }
 
 type spaceAccountsModel struct {
@@ -48,6 +63,9 @@ func (r *spaceAccountsResource) Schema(_ context.Context, _ resource.SchemaReque
 					"account_id": schema.StringAttribute{Required: true, MarkdownDescription: "The account (`acc_…`)."},
 					"default": schema.BoolAttribute{Optional: true, Computed: true, Default: booldefault.StaticBool(false),
 						MarkdownDescription: "The account the space's runs of its harness use unless a launch names another."},
+					"priority": schema.Int64Attribute{Optional: true, Computed: true, Default: int64default.StaticInt64(defaultPoolPriority),
+						Validators:          []validator.Int64{int64validator.Between(1, 1000)},
+						MarkdownDescription: "Pool order for usage-limit failover (SpaceMan ADR-0090): when a run's account reaches its limit, the run moves to the pool's next eligible account, lower first (1-1000; default 100)."},
 				}}},
 		},
 	}
@@ -58,7 +76,7 @@ func (r *spaceAccountsResource) bindings(ctx context.Context, v types.Set, d *di
 	d.Append(v.ElementsAs(ctx, &ms, false)...)
 	out := make([]client.AccountBinding, 0, len(ms))
 	for _, m := range ms {
-		out = append(out, client.AccountBinding{AccountID: m.AccountID.ValueString(), Default: m.Default.ValueBool()})
+		out = append(out, client.AccountBinding{AccountID: m.AccountID.ValueString(), Default: m.Default.ValueBool(), Priority: m.Priority.ValueInt64()})
 	}
 	return out
 }
@@ -67,7 +85,7 @@ func bindingsValue(bs []client.AccountBinding) types.Set {
 	elems := make([]attr.Value, 0, len(bs))
 	for _, b := range bs {
 		elems = append(elems, types.ObjectValueMust(bindingType.AttrTypes, map[string]attr.Value{
-			"account_id": types.StringValue(b.AccountID), "default": types.BoolValue(b.Default)}))
+			"account_id": types.StringValue(b.AccountID), "default": types.BoolValue(b.Default), "priority": types.Int64Value(poolPriority(b.Priority))}))
 	}
 	return types.SetValueMust(bindingType, elems)
 }
