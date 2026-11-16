@@ -170,25 +170,34 @@ type SkillRef struct {
 
 // Profile is a harness profile.
 type Profile struct {
-	ID          string            `json:"id"`
-	Slug        string            `json:"slug"`
-	Name        string            `json:"name"`
-	Harness     string            `json:"harness"`
-	Model       string            `json:"model,omitempty"`
-	Settings    map[string]string `json:"settings"`
-	Description string            `json:"description,omitempty"`
-	Revision    int64             `json:"revision"`
-	Version     int64             `json:"version"`
+	ID       string            `json:"id"`
+	Slug     string            `json:"slug"`
+	Name     string            `json:"name"`
+	Harness  string            `json:"harness"`
+	Model    string            `json:"model,omitempty"`
+	Settings map[string]string `json:"settings"`
+	// ClaudeSettings are the profile's Claude Code settings.json keys, a JSON object (omitted when
+	// the profile has none).
+	ClaudeSettings json.RawMessage `json:"claude_settings,omitempty"`
+	// HarnessVersion is the profile's Claude Code version pin: "" follows the node's channel.
+	HarnessVersion string `json:"harness_version,omitempty"`
+	Description    string `json:"description,omitempty"`
+	Revision       int64  `json:"revision"`
+	Version        int64  `json:"version"`
 }
 
 // ProfileInput is PUT /harness-profiles/{id|new}.
 type ProfileInput struct {
-	Slug        string            `json:"slug,omitempty"`
-	Name        string            `json:"name"`
-	Harness     string            `json:"harness,omitempty"`
-	Model       string            `json:"model,omitempty"`
-	Settings    map[string]string `json:"settings,omitempty"`
-	Description string            `json:"description,omitempty"`
+	Slug     string            `json:"slug,omitempty"`
+	Name     string            `json:"name"`
+	Harness  string            `json:"harness,omitempty"`
+	Model    string            `json:"model,omitempty"`
+	Settings map[string]string `json:"settings,omitempty"`
+	// ClaudeSettings nil keeps the stored settings; `{}` clears them.
+	ClaudeSettings json.RawMessage `json:"claude_settings,omitempty"`
+	// HarnessVersion nil keeps the stored pin; "" clears it.
+	HarnessVersion *string `json:"harness_version,omitempty"`
+	Description    string  `json:"description,omitempty"`
 }
 
 // RoleTemplate is a role template.
@@ -371,6 +380,7 @@ func (s *Skill) LatestPublished() *SkillVersion {
 // MCPServer is an upstream MCP server (never its header values).
 type MCPServer struct {
 	ID             string   `json:"id"`
+	Kind           string   `json:"kind,omitempty"` // "http", or "spaceman" for a SpaceMan MCP server (SpacemanMCPServer)
 	Slug           string   `json:"slug"`
 	Name           string   `json:"name"`
 	Description    string   `json:"description,omitempty"`
@@ -441,12 +451,15 @@ type EventConnectionInput struct {
 	Enabled bool   `json:"enabled"`
 }
 
-// TemplateFilter is one filter of an event template definition.
+// TemplateFilter is one filter of an event template definition. IfSet and UnlessSet name a variable: the filter applies
+// only when that variable has a value (IfSet) or has none (UnlessSet) (SpaceMan ADR-0061).
 type TemplateFilter struct {
-	Path   string   `json:"path"`
-	Op     string   `json:"op"`
-	Value  string   `json:"value,omitempty"`
-	Values []string `json:"values,omitempty"`
+	Path      string   `json:"path"`
+	Op        string   `json:"op"`
+	Value     string   `json:"value,omitempty"`
+	Values    []string `json:"values,omitempty"`
+	IfSet     string   `json:"if_set,omitempty"`
+	UnlessSet string   `json:"unless_set,omitempty"`
 }
 
 // TemplateVariable is a subscription variable of a definition.

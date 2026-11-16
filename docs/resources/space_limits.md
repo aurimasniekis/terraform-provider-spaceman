@@ -21,13 +21,20 @@ resource "spaceman_space_limits" "payments" {
   task_deadline_minutes  = 240
   budget_tokens_24h      = 20000000
   budget_warn_percent    = 75
-  on_lower               = "drain"
 
-  # Usage-limit failover (needs SpaceMan with account pools).
+  # New runs' terminals are held at 200x50 (both must be set; 0 is the node's default). Needs terminal:takeover.
+  terminal_cols = 200
+  terminal_rows = 50
+
+  # At a usage limit: fail over to another bound account, and tell people only about waits longer than a day.
+  usage_limit_failover           = 1
+  usage_limit_notify_after_hours = 24
+  usage_limit_switch_max_per_day = 6
+  # Wait for a reset closer than 15 minutes; skip an account with less than 10% of a window left.
   usage_limit_wait_if_reset_within = 15
   usage_limit_min_headroom_percent = 10
-  usage_limit_failover             = 1
-  usage_limit_switch_max_per_day   = 6
+
+  on_lower = "drain"
 }
 ```
 
@@ -63,10 +70,15 @@ resource "spaceman_space_limits" "payments" {
 - `storage_quota_bytes` (Number) Attachment bytes stored for the space (1 MiB-1 TiB). Unset: not managed (the installation default or an override set elsewhere applies).
 - `support_depth` (Number) How deep support may nest (1-3; 1: a KB session cannot ask a knowledge base). Unset: not managed (the installation default or an override set elsewhere applies).
 - `task_deadline_minutes` (Number) How long a top-level task may run before control and the operators are told (0-43200; 0: none; never stops a task). Unset: not managed (the installation default or an override set elsewhere applies).
-- `usage_limit_failover` (Number) Usage-limit failover (SpaceMan ADR-0079, ADR-0090): 1: a launch, a resume and a live run whose account reaches its limit move to the next eligible account of the pool; 0: off (SpaceMan's default). Only 0 and 1. Unset: not managed (the installation default or an override set elsewhere applies).
-- `usage_limit_min_headroom_percent` (Number) Percent: a new run does not start on an account when a window with known usage leaves less than this share free; it uses the pool's next eligible account (0-100; 0: off; running agents are never moved for it; SpaceMan ADR-0090). Unset: not managed (the installation default or an override set elsewhere applies).
-- `usage_limit_switch_max_per_day` (Number) How many times one run may be moved to another account in a day when failover is on (0-50; SpaceMan's default 6). Unset: not managed (the installation default or an override set elsewhere applies).
-- `usage_limit_wait_if_reset_within` (Number) Minutes: with usage-limit failover on, a run whose account reaches its usage limit waits for the reset instead of moving to another account of its pool when the reset is this near (0-1440; SpaceMan ADR-0090; default 15). Unset: not managed (the installation default or an override set elsewhere applies).
+- `terminal_cols` (Number) Width new runs' terminals are held at, in columns (40-400; 0: the node's default size, its `runner.terminal_size`). A size applies only when `terminal_rows` is set too (both non-zero); runs already started keep their size. Changing it needs `terminal:takeover` (space admins). Requires SpaceMan 0.1.1 or later (ADR-0075). Unset: not managed (the installation default or an override set elsewhere applies).
+- `terminal_rows` (Number) Height new runs' terminals are held at, in rows (10-200; 0: the node's default size). A size applies only when `terminal_cols` is set too (both non-zero); runs already started keep their size. Changing it needs `terminal:takeover` (space admins). Requires SpaceMan 0.1.1 or later. Unset: not managed (the installation default or an override set elsewhere applies).
+- `usage_limit_failover` (Number) Let a launch or resume whose account is held at a usage limit use another account bound to the space for the same harness that is not held (1: on, 0: off, SpaceMan's default). A space routed through an LLM gateway never falls back to a direct account. Requires a SpaceMan version with usage limits (ADR-0079). Unset: not managed (the installation default or an override set elsewhere applies).
+- `usage_limit_keep_alive_max_minutes` (Number) Minutes a run at a usage limit waits for the reset with its process kept alive before it is stopped and parked; also the longest gap between checks of a hold whose reset time is unknown (1-1440; SpaceMan's default 360). Requires a SpaceMan version with usage limits. Unset: not managed (the installation default or an override set elsewhere applies).
+- `usage_limit_max_wait_hours` (Number) Hours a worker or diagnostic run parked at a usage limit waits to be resumed before its task goes back to the queue, ready and unassigned; control is never given up on (1-720; SpaceMan's default 168, 7 days). A wait already parked keeps its release time. Requires a SpaceMan version with usage limits. Unset: not managed (the installation default or an override set elsewhere applies).
+- `usage_limit_min_headroom_percent` (Number) Percent: a new run does not start on an account when a window with known usage leaves less than this share free; it uses the pool's next eligible account (0-100; 0: off; running agents are never moved for it). Requires SpaceMan 0.1.8 or later. Unset: not managed (the installation default or an override set elsewhere applies).
+- `usage_limit_notify_after_hours` (Number) Hours away the reset of an account held at a usage limit must be for the space's people to get one human action about it, once per account window (0-720; 0: never; SpaceMan's default 12, so weekly limits, not 5-hour ones). Requires a SpaceMan version with usage limits. Unset: not managed (the installation default or an override set elsewhere applies).
+- `usage_limit_switch_max_per_day` (Number) How many times one run may be moved to another account in a day when failover is on (0-50; SpaceMan's default 6). Requires SpaceMan 0.1.8 or later (ADR-0090). Unset: not managed (the installation default or an override set elsewhere applies).
+- `usage_limit_wait_if_reset_within` (Number) Minutes: with usage-limit failover on, a run whose account reaches its usage limit waits for the reset instead of moving to another account of its pool when the reset is this near (0-1440; SpaceMan's default 15). Requires SpaceMan 0.1.8 or later. Unset: not managed (the installation default or an override set elsewhere applies).
 
 ### Read-Only
 

@@ -48,7 +48,7 @@ func (r *spaceRolePoolResource) Schema(_ context.Context, _ resource.SchemaReque
 		MarkdownDescription: "The accounts one role of a space may use when a run reaches a usage limit (`PUT /spaces/{id}/account-pools/{role}`, " +
 			"SpaceMan ADR-0090). A role with a pool uses only these accounts instead of the space's pool; each must also be bound to the space " +
 			"first (`spaceman_space_accounts`): add `depends_on` for the binding resource. The resource owns the role's whole pool, so entries added in the UI show as drift. Destroying it removes " +
-			"the role's pool, and the role uses the space's pool again. Needs a SpaceMan release with account pools (after 0.1.0-rc.8).",
+			"the role's pool, and the role uses the space's pool again. Needs a SpaceMan release with account pools (0.1.8 or later).",
 		Attributes: map[string]schema.Attribute{
 			"id":       idAttr("`<space_id>/<role>`."),
 			"space_id": requiredReplace("The space."),
@@ -109,7 +109,7 @@ const rolePoolAttempts = 5
 var rolePoolBackoff = func(n int) time.Duration { return time.Duration(n) * 200 * time.Millisecond }
 
 // errNoPools explains a 404 from a SpaceMan without account pools.
-const errNoPools = "SpaceMan answered 404: it needs a SpaceMan release with account pools (after 0.1.0-rc.8), or the space does not exist."
+const errNoPools = "SpaceMan answered 404: it needs SpaceMan 0.1.8 or later (account pools), or the space does not exist."
 
 // put writes the pool. The If-Match version is read right before every write: the same apply may also change the
 // space's bindings, which bumps the version of the shared account configuration. A version conflict re-reads the version

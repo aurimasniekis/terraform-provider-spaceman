@@ -121,8 +121,62 @@ func TestLimitAttributes(t *testing.T) {
 		}
 		seen[l.key] = true
 	}
-	if len(seen) != 26 || seen["max_top_level_tasks"] {
+	if len(seen) != 31 || seen["max_top_level_tasks"] {
 		t.Fatalf("limits = %v", seen)
+	}
+	for k := range limitChecks {
+		if !seen[k] {
+			t.Errorf("check for unknown limit %s", k)
+		}
+	}
+}
+
+// The terminal size limits take 0 (the node's default) or SpaceMan's bounds: 40-400 columns, 10-200 rows.
+func TestTerminalSizeLimitChecks(t *testing.T) {
+	ok := func(key string, n int64) bool {
+		resp := &validator.Int64Response{}
+		limitChecks[key].ValidateInt64(context.Background(), validator.Int64Request{Path: path.Root(key), ConfigValue: types.Int64Value(n)}, resp)
+		return !resp.Diagnostics.HasError()
+	}
+	for _, c := range []struct {
+		key  string
+		n    int64
+		want bool
+	}{
+		{"terminal_cols", 0, true}, {"terminal_cols", 40, true}, {"terminal_cols", 400, true},
+		{"terminal_cols", 1, false}, {"terminal_cols", 39, false}, {"terminal_cols", 401, false}, {"terminal_cols", -1, false},
+		{"terminal_rows", 0, true}, {"terminal_rows", 10, true}, {"terminal_rows", 200, true},
+		{"terminal_rows", 9, false}, {"terminal_rows", 201, false}, {"terminal_rows", -1, false},
+	} {
+		if got := ok(c.key, c.n); got != c.want {
+			t.Errorf("%s = %d: valid %v, want %v", c.key, c.n, got, c.want)
+		}
+	}
+}
+
+// The usage limits take SpaceMan's config.LimitRanges: a switch, 1-1440 minutes, 1-720 hours and 0-720 hours.
+func TestUsageLimitChecks(t *testing.T) {
+	ok := func(key string, n int64) bool {
+		resp := &validator.Int64Response{}
+		limitChecks[key].ValidateInt64(context.Background(), validator.Int64Request{Path: path.Root(key), ConfigValue: types.Int64Value(n)}, resp)
+		return !resp.Diagnostics.HasError()
+	}
+	for _, c := range []struct {
+		key  string
+		n    int64
+		want bool
+	}{
+		{"usage_limit_failover", 0, true}, {"usage_limit_failover", 1, true}, {"usage_limit_failover", 2, false}, {"usage_limit_failover", -1, false},
+		{"usage_limit_keep_alive_max_minutes", 1, true}, {"usage_limit_keep_alive_max_minutes", 1440, true},
+		{"usage_limit_keep_alive_max_minutes", 0, false}, {"usage_limit_keep_alive_max_minutes", 1441, false},
+		{"usage_limit_max_wait_hours", 1, true}, {"usage_limit_max_wait_hours", 720, true},
+		{"usage_limit_max_wait_hours", 0, false}, {"usage_limit_max_wait_hours", 721, false},
+		{"usage_limit_notify_after_hours", 0, true}, {"usage_limit_notify_after_hours", 720, true},
+		{"usage_limit_notify_after_hours", -1, false}, {"usage_limit_notify_after_hours", 721, false},
+	} {
+		if got := ok(c.key, c.n); got != c.want {
+			t.Errorf("%s = %d: valid %v, want %v", c.key, c.n, got, c.want)
+		}
 	}
 }
 

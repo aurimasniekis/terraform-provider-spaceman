@@ -48,7 +48,8 @@ func (r *mcpServerResource) Schema(_ context.Context, _ resource.SchemaRequest, 
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "An upstream MCP server of the gateway (`/mcp-servers`). Header values (e.g. `Authorization`) are write-only: sealed by " +
 			"SpaceMan, never returned and never stored by Terraform (requires Terraform 1.11 or later). Agents see the server's tools only through " +
-			"a `spaceman_mcp_grant`. Deleting the server removes its grants.",
+			"a `spaceman_mcp_grant`. Deleting the server removes its grants. SpaceMan MCP servers (SpaceMan's own API as tools) are " +
+			"`spaceman_admin_mcp_server`: this resource refuses them.",
 		Attributes: map[string]schema.Attribute{
 			"id": idAttr("The server ID."),
 			"slug": schema.StringAttribute{Required: true, MarkdownDescription: "Namespace of the server's tools (`<slug>__<tool>`). Changing it replaces the server (and drops its grants).",
@@ -130,6 +131,11 @@ func (r *mcpServerResource) Read(ctx context.Context, req resource.ReadRequest, 
 		return
 	} else if err != nil {
 		addAPIError(&resp.Diagnostics, "Could not read the MCP server", err)
+		return
+	}
+	if s.Kind == client.MCPKindSpaceman {
+		resp.Diagnostics.AddError("Not an external MCP server",
+			"MCP server "+s.ID+" ("+s.Slug+") is a SpaceMan MCP server: manage it with spaceman_admin_mcp_server, not spaceman_mcp_server.")
 		return
 	}
 	r.toModel(ctx, s, &m)

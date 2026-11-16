@@ -26,6 +26,15 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+      # The contract test compares the Telegram settings schemas with SpaceMan's OpenAPI document. Pinned to a commit
+      # that has the settings API (public repository); TODO: move to a release tag once one carries it.
+      - name: checkout SpaceMan (OpenAPI contract)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: aurimasniekis/go-spaceman
+          ref: 5685a282560d04f2f26a7fe0672add2677626db7 # 5685a28, feat/telegram-core
+          path: spaceman-src
+          persist-credentials: false
       - name: golangci-lint
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
@@ -33,6 +42,10 @@ jobs:
       - name: unit tests and docs drift
         # Acceptance tests (make acc) need Terraform >= 1.11 and a SpaceMan checkout; they run locally.
         run: make test
+        env:
+          SPACEMAN_SRC: ${{ github.workspace }}/spaceman-src
+          # A missing checkout or API operation fails the contract test instead of skipping it.
+          SM_REQUIRE_OPENAPI: "1"
       # Known vulnerabilities that the provider's code reaches (as SpaceMan's CI checks its own).
       - name: govulncheck
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...

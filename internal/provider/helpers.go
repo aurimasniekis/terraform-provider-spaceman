@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -212,13 +213,38 @@ func skillRefs(ctx context.Context, v types.List, diags *diag.Diagnostics) []cli
 	return out
 }
 
-func skillRefsValue(refs []client.SkillRef) types.List {
+// skillRefsValue converts the API's skill references to the attribute value. The API reports "no pin" as "": that
+// becomes null, so an omitted pin stays null after apply, except where prior (the plan or state being refreshed) has
+// "" for the same skill at the same position, so `pin = ""` and state written before this rule plan no change.
+func skillRefsValue(refs []client.SkillRef, prior types.List) types.List {
+	var priorPins []attr.Value
+	if !prior.IsNull() && !prior.IsUnknown() {
+		priorPins = prior.Elements()
+	}
 	elems := make([]attr.Value, 0, len(refs))
-	for _, r := range refs {
+	for i, r := range refs {
+		pin := types.StringValue(r.Pin)
+		if r.Pin == "" && !priorEmptyPin(priorPins, i, r.SkillID) {
+			pin = types.StringNull()
+		}
 		elems = append(elems, types.ObjectValueMust(skillRefType.AttrTypes, map[string]attr.Value{
-			"skill_id": types.StringValue(r.SkillID), "pin": types.StringValue(r.Pin)}))
+			"skill_id": types.StringValue(r.SkillID), "pin": pin}))
 	}
 	return types.ListValueMust(skillRefType, elems)
+}
+
+// priorEmptyPin reports whether prior element i references skillID with a known empty pin.
+func priorEmptyPin(prior []attr.Value, i int, skillID string) bool {
+	if i >= len(prior) {
+		return false
+	}
+	o, ok := prior[i].(types.Object)
+	if !ok || o.IsNull() || o.IsUnknown() {
+		return false
+	}
+	id, _ := o.Attributes()["skill_id"].(types.String)
+	pin, _ := o.Attributes()["pin"].(types.String)
+	return id.ValueString() == skillID && !pin.IsNull() && !pin.IsUnknown() && pin.ValueString() == ""
 }
 
 // ---- JSON attributes ----
@@ -282,6 +308,32 @@ func marshalDefinition(d *client.TemplateDefinition) (string, error) {
 		return "", err
 	}
 	return canonicalJSON(string(b))
+}
+
+// templateFilterOps are the filter operators SpaceMan accepts (`absent` since SpaceMan ADR-0061). The source of truth
+// is go-spaceman's `filterOps` in internal/events/template/definition.go: an op added there is refused here at plan
+// time until this list gains it, so keep the two in sync.
+var templateFilterOps = []string{"eq", "ne", "in", "exists", "absent", "prefix"}
+
+// checkDefinition reports the mistakes in a configured definition that can be found without the server: an unknown
+// filter op, and an `if_set` / `unless_set` naming a variable the definition doesn't define. SpaceMan validates the rest.
+func checkDefinition(d *client.TemplateDefinition) error {
+	vars := map[string]bool{}
+	for _, v := range d.Variables {
+		vars[v.Name] = true
+	}
+	var errs []error
+	for i, f := range d.Filters {
+		if !slices.Contains(templateFilterOps, f.Op) {
+			errs = append(errs, fmt.Errorf("filters[%d].op: %q is not one of %s", i, f.Op, strings.Join(templateFilterOps, ", ")))
+		}
+		for _, c := range [][2]string{{"if_set", f.IfSet}, {"unless_set", f.UnlessSet}} {
+			if c[1] != "" && !vars[c[1]] {
+				errs = append(errs, fmt.Errorf("filters[%d].%s: variable %q is not defined", i, c[0], c[1]))
+			}
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // parseDefinition decodes a definition from configuration.

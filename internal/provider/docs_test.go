@@ -178,6 +178,11 @@ func renderDataSource(t *testing.T, name string, s dschema.Schema) string {
 }
 
 const indexGuide = `
+## Requirements
+
+SpaceMan v0.1.0 or later and Terraform 1.11 or later (write-only arguments). The provider shares its version number with
+SpaceMan.
+
 ## Authentication
 
 The provider sends ` + "`Authorization: Bearer <token>`" + ` with an API token (` + "`spaceman_at_…`" + `) or the bootstrap root token

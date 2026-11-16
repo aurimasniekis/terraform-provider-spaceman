@@ -16,12 +16,21 @@ resource "spaceman_event_template" "deploy_failed" {
   slug = "deploy-failed"
   name = "Failed deploys"
   definition = jsonencode({
-    subject   = "evt.deploy.{{vars.env}}.>"
-    variables = [{ name = "env", required = true, example = "prod" }]
-    filters   = [{ path = "data.status", op = "eq", value = "failed" }]
-    title     = "Deploy to {{vars.env}} failed"
-    body      = "{{data.message}}"
-    urgency   = "high"
+    subject = "evt.deploy.{{vars.env}}.>"
+    variables = [
+      { name = "env", required = true, example = "prod" },
+      { name = "service", description = "Only this service; empty for every service" },
+      { name = "include_rollbacks", pattern = "true", description = "Set to true to include rollbacks" },
+    ]
+    filters = [
+      { path = "data.status", op = "eq", value = "failed" },
+      # Optional filters: applied only when the subscription sets `service` / leaves `include_rollbacks` empty.
+      { path = "data.service", op = "eq", value = "{{vars.service}}", if_set = "service" },
+      { path = "data.rollback_of", op = "absent", unless_set = "include_rollbacks" },
+    ]
+    title   = "Deploy to {{vars.env}} failed"
+    body    = "{{data.message}}"
+    urgency = "high"
   })
 }
 ```
@@ -31,7 +40,7 @@ resource "spaceman_event_template" "deploy_failed" {
 
 ### Required
 
-- `definition` (String) The definition as JSON (use `jsonencode`): `subject`, `variables`, `filters`, `input_schema`, `title`, `body`, `instructions`, `correlation`, `urgency`. Formatting and key order never cause a diff.
+- `definition` (String) The definition as JSON (use `jsonencode`): `subject`, `variables`, `filters`, `input_schema`, `title`, `body`, `instructions`, `correlation`, `urgency`. A filter has `path`, `op` (`eq`, `ne`, `in`, `exists`, `absent`, `prefix`), `value` or `values`, and optionally `if_set` or `unless_set` naming a variable: the filter applies only when that variable has a value (`if_set`) or has none (`unless_set`). Formatting and key order never cause a diff.
 - `name` (String) Display name. Fixed after creation.
 - `slug` (String) Unique identifier. Fixed after creation.
 

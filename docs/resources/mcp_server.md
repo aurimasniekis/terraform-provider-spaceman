@@ -7,7 +7,7 @@ description: |-
 
 # spaceman_mcp_server (Resource)
 
-An upstream MCP server of the gateway (`/mcp-servers`). Header values (e.g. `Authorization`) are write-only: sealed by SpaceMan, never returned and never stored by Terraform (requires Terraform 1.11 or later). Agents see the server's tools only through a `spaceman_mcp_grant`. Deleting the server removes its grants.
+An upstream MCP server of the gateway (`/mcp-servers`). Header values (e.g. `Authorization`) are write-only: sealed by SpaceMan, never returned and never stored by Terraform (requires Terraform 1.11 or later). Agents see the server's tools only through a `spaceman_mcp_grant`. Deleting the server removes its grants. SpaceMan MCP servers (SpaceMan's own API as tools) are `spaceman_admin_mcp_server`: this resource refuses them.
 
 ## Example Usage
 

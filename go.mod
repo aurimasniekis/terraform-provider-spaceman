@@ -1,9 +1,10 @@
 module github.com/aurimasniekis/terraform-provider-spaceman
 
-go 1.27.3
+go 1.27.4
 
 require (
 	github.com/hashicorp/terraform-plugin-framework v1.19.0
+	github.com/hashicorp/terraform-plugin-framework-jsontypes v0.2.0
 	github.com/hashicorp/terraform-plugin-framework-validators v0.19.0
 	github.com/hashicorp/terraform-plugin-go v0.31.0
 	github.com/hashicorp/terraform-plugin-testing v1.16.0

@@ -95,7 +95,7 @@ func (r *spaceRoleResource) toModel(sr *client.SpaceRole, m *spaceRoleModel) {
 	m.Model = types.StringValue(sr.Model)
 	m.Settings = mapValue(sr.Settings)
 	m.Instructions = types.StringValue(sr.Instructions)
-	m.Skills = skillRefsValue(sr.Skills)
+	m.Skills = skillRefsValue(sr.Skills, m.Skills)
 	m.Revision = types.Int64Value(sr.Revision)
 }
 

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -59,7 +60,7 @@ func TestSchemasAreValid(t *testing.T) {
 			}
 		}
 	}
-	if len(names) != 34 {
+	if len(names) != 40 {
 		t.Errorf("resources = %d", len(names))
 	}
 	for _, f := range p.DataSources(ctx) {
@@ -118,6 +119,49 @@ func TestCanonicalDefinition(t *testing.T) {
 	}
 }
 
+// TestDefinitionOptionalFilters (SpaceMan ADR-0061): if_set, unless_set and the absent op survive a round trip, and
+// the validator refuses unknown ops and optional filters naming undefined variables.
+func TestDefinitionOptionalFilters(t *testing.T) {
+	cfg := `{"subject":"evt.x.>","title":"T","body":"B",
+	  "variables":[{"name":"repository"},{"name":"include_bots","pattern":"true"}],
+	  "filters":[
+	    {"path":"data.repository.full_name","op":"eq","value":"{{vars.repository}}","if_set":"repository"},
+	    {"path":"data.actor.type","op":"ne","value":"Bot","unless_set":"include_bots"},
+	    {"path":"data.payload.issue.pull_request","op":"absent"}]}`
+	d, err := parseDefinition(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := checkDefinition(d); err != nil {
+		t.Fatalf("valid definition refused: %v", err)
+	}
+	if d.Filters[0].IfSet != "repository" || d.Filters[1].UnlessSet != "include_bots" || d.Filters[2].Op != "absent" {
+		t.Fatalf("filters lost fields: %+v", d.Filters)
+	}
+	if got := definitionValue(types.StringValue(cfg), d); got.ValueString() != cfg {
+		t.Fatalf("the server's equal definition is drift: %s", got)
+	}
+	server := *d
+	server.Filters = append([]client.TemplateFilter(nil), d.Filters...)
+	server.Filters[0].IfSet = ""
+	if got := definitionValue(types.StringValue(cfg), &server); got.ValueString() == cfg {
+		t.Fatal("a dropped if_set must be drift")
+	}
+	for _, tc := range []struct{ def, want string }{
+		{`{"subject":"evt.x.>","title":"T","body":"B","filters":[{"path":"data.a","op":"missing"}]}`, `filters[0].op: "missing"`},
+		{`{"subject":"evt.x.>","title":"T","body":"B","filters":[{"path":"data.a","op":"exists","if_set":"nope"}]}`, `filters[0].if_set: variable "nope"`},
+		{`{"subject":"evt.x.>","title":"T","body":"B","filters":[{"path":"data.a","op":"exists","unless_set":"nope"}]}`, `filters[0].unless_set: variable "nope"`},
+	} {
+		d, err := parseDefinition(tc.def)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := checkDefinition(d); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: got %v, want %q", tc.def, err, tc.want)
+		}
+	}
+}
+
 func TestDefinitionValueKeepsEquivalentPrior(t *testing.T) {
 	prior := types.StringValue(`{"title":"T","body":"B","subject":"evt.x.>"}`)
 	server := &client.TemplateDefinition{Subject: "evt.x.>", Title: "T", Body: "B"}
@@ -172,9 +216,32 @@ func TestConversions(t *testing.T) {
 	if mapValue(nil).IsNull() || listValue(nil).IsNull() || len(listValue(nil).Elements()) != 0 {
 		t.Fatal("nil converts to empty, not null")
 	}
-	refs := skillRefs(ctx, skillRefsValue([]client.SkillRef{{SkillID: "skl_1"}, {SkillID: "skl_2", Pin: "skv_1"}}), &d)
+	apiRefs := []client.SkillRef{{SkillID: "skl_1"}, {SkillID: "skl_2", Pin: "skv_1"}}
+	refs := skillRefs(ctx, skillRefsValue(apiRefs, types.ListNull(skillRefType)), &d)
 	if len(refs) != 2 || refs[1].Pin != "skv_1" || refs[0].Pin != "" {
 		t.Fatalf("skill refs = %+v", refs)
+	}
+	// No pin is null unless the prior value said "" for the same skill at the same position.
+	pinAt := func(l types.List, i int) types.String {
+		return l.Elements()[i].(types.Object).Attributes()["pin"].(types.String)
+	}
+	ref := func(id string, pin types.String) attr.Value {
+		return types.ObjectValueMust(skillRefType.AttrTypes, map[string]attr.Value{"skill_id": types.StringValue(id), "pin": pin})
+	}
+	if v := skillRefsValue(apiRefs, types.ListNull(skillRefType)); !pinAt(v, 0).IsNull() || pinAt(v, 1).ValueString() != "skv_1" {
+		t.Fatalf("no prior: %v", v)
+	}
+	prior := types.ListValueMust(skillRefType, []attr.Value{ref("skl_1", types.StringValue("")), ref("skl_2", types.StringNull())})
+	if v := skillRefsValue(apiRefs, prior); pinAt(v, 0).IsNull() || pinAt(v, 0).ValueString() != "" {
+		t.Fatalf("prior empty pin kept: %v", v)
+	}
+	moved := types.ListValueMust(skillRefType, []attr.Value{ref("skl_9", types.StringValue(""))})
+	if v := skillRefsValue(apiRefs, moved); !pinAt(v, 0).IsNull() {
+		t.Fatalf("another skill's empty pin: %v", v)
+	}
+	unknown := types.ListValueMust(skillRefType, []attr.Value{ref("skl_1", types.StringUnknown())})
+	if v := skillRefsValue(apiRefs, unknown); !pinAt(v, 0).IsNull() {
+		t.Fatalf("unknown planned pin: %v", v)
 	}
 	if boolPtr(types.BoolNull()) != nil || *boolPtr(types.BoolValue(false)) != false || strPtr(types.StringUnknown()) != nil {
 		t.Fatal("pointers")

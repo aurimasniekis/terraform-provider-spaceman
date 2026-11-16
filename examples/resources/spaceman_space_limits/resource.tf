@@ -7,11 +7,18 @@ resource "spaceman_space_limits" "payments" {
   task_deadline_minutes  = 240
   budget_tokens_24h      = 20000000
   budget_warn_percent    = 75
-  on_lower               = "drain"
 
-  # Usage-limit failover (needs SpaceMan with account pools).
+  # New runs' terminals are held at 200x50 (both must be set; 0 is the node's default). Needs terminal:takeover.
+  terminal_cols = 200
+  terminal_rows = 50
+
+  # At a usage limit: fail over to another bound account, and tell people only about waits longer than a day.
+  usage_limit_failover           = 1
+  usage_limit_notify_after_hours = 24
+  usage_limit_switch_max_per_day = 6
+  # Wait for a reset closer than 15 minutes; skip an account with less than 10% of a window left.
   usage_limit_wait_if_reset_within = 15
   usage_limit_min_headroom_percent = 10
-  usage_limit_failover             = 1
-  usage_limit_switch_max_per_day   = 6
+
+  on_lower = "drain"
 }

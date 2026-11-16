@@ -4,4 +4,30 @@ resource "spaceman_harness_profile" "careful" {
   harness  = "claude-code"
   model    = "claude-sonnet-4-5"
   settings = { permission_mode = "default" }
+
+  # Pin the Claude Code version its runs get: latest, stable or an exact X.Y.Z.
+  # "" clears the pin (runs follow the node's channel); leaving it out keeps
+  # whatever pin SpaceMan has.
+  harness_version = "stable"
+}
+
+# Claude Code settings.json keys for the profile's runs: any keys. "$defaults" keeps
+# Claude Code's built-in rules in an auto mode list.
+resource "spaceman_harness_profile" "auto" {
+  slug     = "auto"
+  name     = "Claude Code in auto mode"
+  harness  = "claude-code"
+  settings = { permission_mode = "auto" }
+
+  claude_settings = jsonencode({
+    autoMode = {
+      environment = ["$defaults", "Source control: GitHub repositories of example-org, reached through the gateway host."]
+      allow       = ["$defaults", "Pushing feature branches to the space's repositories is allowed; main only through pull requests."]
+    }
+    permissions = {
+      ask  = ["Bash(git push --force:*)"]
+      deny = ["Read(./secrets/**)"]
+    }
+    env = { GIT_TERMINAL_PROMPT = "0" }
+  })
 }

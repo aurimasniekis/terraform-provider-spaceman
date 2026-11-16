@@ -7,7 +7,7 @@ description: |-
 
 # spaceman_space_role_pool (Resource)
 
-The accounts one role of a space may use when a run reaches a usage limit (`PUT /spaces/{id}/account-pools/{role}`, SpaceMan ADR-0090). A role with a pool uses only these accounts instead of the space's pool; each must also be bound to the space first (`spaceman_space_accounts`): add `depends_on` for the binding resource. The resource owns the role's whole pool, so entries added in the UI show as drift. Destroying it removes the role's pool, and the role uses the space's pool again. Needs a SpaceMan release with account pools (after 0.1.0-rc.8).
+The accounts one role of a space may use when a run reaches a usage limit (`PUT /spaces/{id}/account-pools/{role}`, SpaceMan ADR-0090). A role with a pool uses only these accounts instead of the space's pool; each must also be bound to the space first (`spaceman_space_accounts`): add `depends_on` for the binding resource. The resource owns the role's whole pool, so entries added in the UI show as drift. Destroying it removes the role's pool, and the role uses the space's pool again. Needs a SpaceMan release with account pools (0.1.8 or later).
 
 ## Example Usage
 

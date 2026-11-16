@@ -125,7 +125,7 @@ func TestRolePoolNotFoundExplains(t *testing.T) {
 	f := &poolAPI{putCodes: []int{http.StatusNotFound}}
 	r := newPoolResource(t, f)
 	_, err := r.put(context.Background(), "spc_1", "worker", nil)
-	if !client.IsNotFound(err) || !strings.Contains(err.Error(), "needs a SpaceMan release with account pools") {
+	if !client.IsNotFound(err) || !strings.Contains(err.Error(), "needs SpaceMan 0.1.8 or later") {
 		t.Fatalf("err = %v", err)
 	}
 }

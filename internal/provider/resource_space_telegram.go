@@ -1,0 +1,236 @@
+package provider
+
+import (
+	"context"
+	"errors"
+	"fmt"
+
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/path"
+	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
+	"github.com/hashicorp/terraform-plugin-framework/types"
+
+	"github.com/aurimasniekis/terraform-provider-spaceman/internal/client"
+)
+
+// ---- a space's Telegram settings (SpaceMan ADR-0083) ----
+
+type spaceTelegramResource struct{ base }
+
+func newSpaceTelegramResource() resource.Resource { return &spaceTelegramResource{} }
+
+type spaceTelegramModel struct {
+	ID                types.String `tfsdk:"id"`
+	SpaceID           types.String `tfsdk:"space_id"`
+	Enabled           types.Bool   `tfsdk:"enabled"`
+	ContentLevel      types.String `tfsdk:"content_level"`
+	EnforcedApprovals types.String `tfsdk:"enforced_approvals"`
+	Topics            types.Bool   `tfsdk:"topics"`
+	TerminalWatch     types.Bool   `tfsdk:"terminal_watch"`
+	GroupChatID       types.Int64  `tfsdk:"group_chat_id"`
+}
+
+func (r *spaceTelegramResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_space_telegram"
+}
+
+func (r *spaceTelegramResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+	enum := func(desc, def string, values ...string) schema.StringAttribute {
+		return schema.StringAttribute{Optional: true, Computed: true, MarkdownDescription: desc, Default: stringDefault(def),
+			Validators: []validator.String{stringvalidator.OneOf(values...)}}
+	}
+	flag := func(desc string) schema.BoolAttribute {
+		return schema.BoolAttribute{Optional: true, Computed: true, MarkdownDescription: desc, Default: booldefault.StaticBool(false)}
+	}
+	resp.Schema = schema.Schema{
+		MarkdownDescription: "A space's Telegram settings (`/spaces/{id}/telegram`, SpaceMan ADR-0083). Telegram is opt-in per space: a space " +
+			"without these settings, or with `enabled = false`, is invisible to the bot and the Mini App. The resource describes the whole " +
+			"setting: an attribute left out takes its default. Needs `space_config:write` in the space and a step-up. Destroying the resource " +
+			"removes the settings, so Telegram is off for the space again, and unbinds the group. Import with the space ID.",
+		Attributes: map[string]schema.Attribute{
+			"id":       idAttr("The space ID."),
+			"space_id": requiredReplace("The space."),
+			"enabled":  schema.BoolAttribute{Required: true, MarkdownDescription: "Whether the space is visible through Telegram."},
+			"content_level": enum("How much of the space Telegram shows: `full` (bodies in chat; default), `summary` (bodies only in the "+
+				"Mini App) or `off` (the space stays hidden, even when `enabled`).", "full", "full", "summary", "off"),
+			"enforced_approvals": enum("Whether approvals that are enforced can be decided in chat with a second confirmation (`confirm`), "+
+				"or only on the web (`web_only`; default).", "web_only", "web_only", "confirm"),
+			"topics":         flag("Whether the space gets its own topic for users in topics mode. Default `false`."),
+			"terminal_watch": flag("Whether a run's terminal can be watched (read-only) from the Mini App. Default `false`."),
+			"group_chat_id": schema.Int64Attribute{Optional: true, Computed: true,
+				MarkdownDescription: "Group mode: the chat ID of the forum supergroup (a negative number such as `-1001234567890`) bound to the space, " +
+					"where members who linked their account can use the space's summaries. Left out: the binding is not managed and stays as it " +
+					"is (`0` when none). Set `0` to unbind. Changing it needs the admin permission `telegram_group:write` (besides " +
+					"`space_config:write`); the group must be a forum supergroup (topics turned on) the bot is a member of (422 otherwise), " +
+					"the bot must be running (503 otherwise) and a group serves one space only (409 when it is bound to another).",
+				Validators:    []validator.Int64{supergroupChatID{}},
+				PlanModifiers: []planmodifier.Int64{int64planmodifier.UseStateForUnknown()}},
+		},
+	}
+}
+
+func (r *spaceTelegramResource) toModel(s *client.SpaceTelegram, m *spaceTelegramModel) {
+	m.ID = types.StringValue(s.SpaceID)
+	m.SpaceID = types.StringValue(s.SpaceID)
+	m.Enabled = types.BoolValue(s.Enabled)
+	m.ContentLevel = types.StringValue(s.ContentLevel)
+	m.EnforcedApprovals = types.StringValue(s.EnforcedApprovals)
+	m.Topics = types.BoolValue(s.Topics)
+	m.TerminalWatch = types.BoolValue(s.TerminalWatch)
+	m.GroupChatID = types.Int64Value(s.GroupChatID)
+}
+
+func (r *spaceTelegramResource) save(ctx context.Context, m *spaceTelegramModel, version int64, group *int64, d *diagnostics) (*client.SpaceTelegram, bool) {
+	s, err := r.c.PutSpaceTelegram(ctx, m.SpaceID.ValueString(), version, client.SpaceTelegramInput{
+		Enabled: boolPtr(m.Enabled), ContentLevel: strPtr(m.ContentLevel), EnforcedApprovals: strPtr(m.EnforcedApprovals),
+		Topics: boolPtr(m.Topics), TerminalWatch: boolPtr(m.TerminalWatch), GroupChatID: group})
+	if err != nil {
+		var ae *client.APIError
+		// Central answers 409 conflict both for a stale version and for a group bound to another space; only when the
+		// version is still current is it the group (a failed re-read keeps the generic diagnostic with its re-plan hint).
+		if group != nil && errors.As(err, &ae) && ae.Status == 409 && ae.Code == "conflict" && r.versionUnchanged(ctx, m.SpaceID.ValueString(), version) {
+			d.AddAttributeError(path.Root("group_chat_id"), "The group is bound to another space",
+				fmt.Sprintf("%s\n\nThis group is bound to another space; unbind it there first (set its group_chat_id to 0), then apply again.", err))
+			return nil, false
+		}
+		addAPIError(d, "Could not save the space's Telegram settings", err)
+		return nil, false
+	}
+	return s, true
+}
+
+// versionUnchanged reports whether the stored settings are still at version, so that a 409 is not a stale-version conflict.
+func (r *spaceTelegramResource) versionUnchanged(ctx context.Context, spaceID string, version int64) bool {
+	cur, err := r.c.GetSpaceTelegram(ctx, spaceID)
+	return err == nil && cur.Version == version
+}
+
+// supergroupChatID accepts a negative supergroup chat ID, or 0 (unbind).
+type supergroupChatID struct{}
+
+func (supergroupChatID) Description(context.Context) string {
+	return "a negative supergroup chat ID, or 0 to unbind"
+}
+func (v supergroupChatID) MarkdownDescription(ctx context.Context) string { return v.Description(ctx) }
+func (v supergroupChatID) ValidateInt64(ctx context.Context, req validator.Int64Request, resp *validator.Int64Response) {
+	if req.ConfigValue.IsNull() || req.ConfigValue.IsUnknown() || req.ConfigValue.ValueInt64() <= 0 {
+		return
+	}
+	resp.Diagnostics.AddAttributeError(req.Path, "Invalid group chat ID",
+		fmt.Sprintf("group_chat_id must be %s, got %d.", v.Description(ctx), req.ConfigValue.ValueInt64()))
+}
+
+// groupChatIDPtr is what is sent: a configured value (0 unbinds), or nothing, so that central leaves the binding alone.
+func groupChatIDPtr(v types.Int64) *int64 {
+	if v.IsNull() || v.IsUnknown() {
+		return nil
+	}
+	n := v.ValueInt64()
+	return &n
+}
+
+func (r *spaceTelegramResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	var m spaceTelegramModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &m)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	cur, err := r.c.GetSpaceTelegram(ctx, m.SpaceID.ValueString())
+	if err != nil {
+		addAPIError(&resp.Diagnostics, "Could not read the space's Telegram settings", err)
+		return
+	}
+	if cur.Stored {
+		resp.Diagnostics.AddError("The space already has Telegram settings",
+			fmt.Sprintf("Import them with `terraform import <address> %s`, or remove them in SpaceMan first.", m.SpaceID.ValueString()))
+		return
+	}
+	s, ok := r.save(ctx, &m, 0, groupChatIDPtr(m.GroupChatID), &resp.Diagnostics)
+	if !ok {
+		return
+	}
+	r.toModel(s, &m)
+	setVersion(ctx, resp.Private, s.Version, &resp.Diagnostics)
+	resp.Diagnostics.Append(resp.State.Set(ctx, &m)...)
+}
+
+func (r *spaceTelegramResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var m spaceTelegramModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &m)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	s, err := r.c.GetSpaceTelegram(ctx, m.SpaceID.ValueString())
+	if client.IsNotFound(err) || (err == nil && !s.Stored) {
+		resp.State.RemoveResource(ctx)
+		return
+	} else if err != nil {
+		addAPIError(&resp.Diagnostics, "Could not read the space's Telegram settings", err)
+		return
+	}
+	r.toModel(s, &m)
+	setVersion(ctx, resp.Private, s.Version, &resp.Diagnostics)
+	resp.Diagnostics.Append(resp.State.Set(ctx, &m)...)
+}
+
+func (r *spaceTelegramResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	var m spaceTelegramModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &m)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	v := getVersion(ctx, req.Private, &resp.Diagnostics)
+	if v == 0 {
+		cur, err := r.c.GetSpaceTelegram(ctx, m.SpaceID.ValueString())
+		if err != nil {
+			addAPIError(&resp.Diagnostics, "Could not read the space's Telegram settings", err)
+			return
+		}
+		v = cur.Version
+	}
+	// An unchanged binding is not sent again: only a change needs telegram_group:write.
+	var prior spaceTelegramModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &prior)...)
+	group := groupChatIDPtr(m.GroupChatID)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if m.GroupChatID.Equal(prior.GroupChatID) {
+		group = nil
+	}
+	s, ok := r.save(ctx, &m, v, group, &resp.Diagnostics)
+	if !ok {
+		return
+	}
+	r.toModel(s, &m)
+	setVersion(ctx, resp.Private, s.Version, &resp.Diagnostics)
+	resp.Diagnostics.Append(resp.State.Set(ctx, &m)...)
+}
+
+func (r *spaceTelegramResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	var m spaceTelegramModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &m)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	cur, err := r.c.GetSpaceTelegram(ctx, m.SpaceID.ValueString())
+	if client.IsNotFound(err) || (err == nil && !cur.Stored) {
+		return
+	} else if err != nil {
+		addAPIError(&resp.Diagnostics, "Could not read the space's Telegram settings", err)
+		return
+	}
+	if err := r.c.DeleteSpaceTelegram(ctx, m.SpaceID.ValueString(), cur.Version); err != nil {
+		addAPIError(&resp.Diagnostics, "Could not remove the space's Telegram settings", err)
+	}
+}
+
+func (r *spaceTelegramResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), req.ID)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("space_id"), req.ID)...)
+}
