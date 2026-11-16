@@ -5,6 +5,14 @@ All notable changes to this provider are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- `spaceman_telegram_settings.notification_defaults.threads`: a link's chat layout, `auto` (default), `on` or `off`
+  (SpaceMan ADR-0089). Needs SpaceMan 0.1.8 or later.
+
+### Changed
+- The Telegram contract test checks against SpaceMan 0.1.8, the release that carries `threads`; the pin moves with each
+  SpaceMan release.
+
 ## [0.1.8] - 2026-11-16
 
 Feature release, released with SpaceMan 0.1.8: account switching at a usage limit. It needs SpaceMan central 0.1.8 or

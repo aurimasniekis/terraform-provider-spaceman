@@ -81,6 +81,7 @@ type tgNotificationDefaultsModel struct {
 	QuietHours       types.Bool   `tfsdk:"quiet_hours"`
 	QuietHoursStart  types.String `tfsdk:"quiet_hours_start"`
 	QuietHoursEnd    types.String `tfsdk:"quiet_hours_end"`
+	Threads          types.String `tfsdk:"threads"`
 }
 
 var objectAsOpts = basetypes.ObjectAsOptions{UnhandledNullAsEmpty: true, UnhandledUnknownAsEmpty: true}
@@ -166,6 +167,8 @@ var (
 		"quiet_hours_start": tgTime("Quiet hours start, in the user's time zone. Default `23:00`."),
 		"quiet_hours_end": tgTime("Quiet hours end, in the user's time zone; before the start they run past midnight, and it must differ from " +
 			"the start. Default `08:00`."),
+		"threads": tgEnum("The chat layout of a link: `auto`, `on` or `off`. A user can override it for their own link. Default `auto`.",
+			"auto", "on", "off"),
 	}
 )
 
@@ -287,7 +290,7 @@ func (r *telegramSettingsResource) toModel(ctx context.Context, s *client.Telegr
 		OperatorMessages: types.BoolValue(n.OperatorMessages), InboxItems: types.StringValue(n.InboxItems),
 		TasksInReview: types.StringValue(n.TasksInReview), FailedRuns: types.StringValue(n.FailedRuns), Digest: types.BoolValue(n.Digest),
 		DigestTime: types.StringValue(n.DigestTime), QuietHours: types.BoolValue(n.QuietHours),
-		QuietHoursStart: types.StringValue(n.QuietHoursStart), QuietHoursEnd: types.StringValue(n.QuietHoursEnd)})
+		QuietHoursStart: types.StringValue(n.QuietHoursStart), QuietHoursEnd: types.StringValue(n.QuietHoursEnd), Threads: types.StringValue(n.Threads)})
 	d.Append(diags...)
 }
 
@@ -335,7 +338,7 @@ func (r *telegramSettingsResource) input(ctx context.Context, m *telegramSetting
 			AssignedToMe: boolPtr(n.AssignedToMe), Escalations: boolPtr(n.Escalations), Reminders: strPtr(n.Reminders),
 			Clarifications: boolPtr(n.Clarifications), OperatorMessages: boolPtr(n.OperatorMessages), InboxItems: strPtr(n.InboxItems),
 			TasksInReview: strPtr(n.TasksInReview), FailedRuns: strPtr(n.FailedRuns), Digest: boolPtr(n.Digest), DigestTime: strPtr(n.DigestTime),
-			QuietHours: boolPtr(n.QuietHours), QuietHoursStart: strPtr(n.QuietHoursStart), QuietHoursEnd: strPtr(n.QuietHoursEnd)}
+			QuietHours: boolPtr(n.QuietHours), QuietHoursStart: strPtr(n.QuietHoursStart), QuietHoursEnd: strPtr(n.QuietHoursEnd), Threads: strPtr(n.Threads)}
 	}
 	return in
 }

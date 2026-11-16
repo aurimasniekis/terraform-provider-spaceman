@@ -98,6 +98,7 @@ type TelegramNotificationDefaults struct {
 	QuietHours       bool   `json:"quiet_hours"`
 	QuietHoursStart  string `json:"quiet_hours_start"`
 	QuietHoursEnd    string `json:"quiet_hours_end"`
+	Threads          string `json:"threads"`
 }
 
 // TelegramSettings are the effective global Telegram settings. Stored is false (version 0) while nothing is stored:
@@ -156,6 +157,7 @@ type TelegramNotificationDefaultsInput struct {
 	QuietHours       *bool   `json:"quiet_hours,omitempty"`
 	QuietHoursStart  *string `json:"quiet_hours_start,omitempty"`
 	QuietHoursEnd    *string `json:"quiet_hours_end,omitempty"`
+	Threads          *string `json:"threads,omitempty"`
 }
 
 // TelegramSettingsInput is PUT /telegram/settings. It replaces everything stored: a nil field takes SpaceMan's

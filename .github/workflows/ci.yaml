@@ -26,13 +26,14 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-      # The contract test compares the Telegram settings schemas with SpaceMan's OpenAPI document. Pinned to a commit
-      # that has the settings API (public repository); TODO: move to a release tag once one carries it.
+      # The contract test compares the Telegram settings schemas with SpaceMan's OpenAPI document. Pinned to the commit
+      # of SpaceMan release v0.1.8 (public repository). The pin should move with each SpaceMan release, together with
+      # the provider's Telegram schemas.
       - name: checkout SpaceMan (OpenAPI contract)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: aurimasniekis/go-spaceman
-          ref: 5685a282560d04f2f26a7fe0672add2677626db7 # 5685a28, feat/telegram-core
+          ref: cabbc95faec2cd129c485ad4bce88a3893a4b8ab # v0.1.8
           path: spaceman-src
           persist-credentials: false
       - name: golangci-lint
