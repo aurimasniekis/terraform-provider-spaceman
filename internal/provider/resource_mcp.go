@@ -2,6 +2,9 @@ package provider
 
 import (
 	"context"
+	"errors"
+	"net/http"
+	"sort"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -299,18 +302,50 @@ func (r *mcpGrantResource) Update(ctx context.Context, req resource.UpdateReques
 	oldExists := err == nil
 	// Add the new grant before revoking the old one: the role is never without a grant.
 	g, err = r.c.AddMCPGrant(ctx, m.ServerID.ValueString(), client.MCPGrantInput{SpaceID: m.SpaceID.ValueString(), Role: m.Role.ValueString(), Tools: tools})
+	if err != nil && client.IsConflict(err) && isAlreadyExists(err) {
+		// A grant for the role already exists (an earlier apply added it and could not revoke the old one): adopt it.
+		if ex, ferr := r.c.FindMCPGrantByRole(ctx, m.ServerID.ValueString(), m.SpaceID.ValueString(), m.Role.ValueString()); ferr == nil && sameStrings(ex.Tools, tools) {
+			g, err = ex, nil
+		}
+	}
 	if err != nil {
 		addAPIError(&resp.Diagnostics, "Could not grant the MCP server", err)
 		return
 	}
-	if oldExists {
-		if err := r.c.RevokeMCPGrant(ctx, old.ServerID.ValueString(), old.ID.ValueString()); err != nil && !client.IsNotFound(err) {
-			addAPIError(&resp.Diagnostics, "Could not revoke the MCP grant", err)
-			return
-		}
-	}
+	// The new grant exists: save it before anything else can fail, so state never keeps pointing at the old one.
 	r.toModel(ctx, g, &m)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &m)...)
+	if oldExists && old.ID.ValueString() != g.ID {
+		if err := r.c.RevokeMCPGrant(ctx, old.ServerID.ValueString(), old.ID.ValueString()); err != nil && !client.IsNotFound(err) {
+			resp.Diagnostics.AddError("Could not revoke the old MCP grant",
+				"The grant for role "+m.Role.ValueString()+" was added and is saved in state, but the old grant "+old.ID.ValueString()+
+					" (role "+old.Role.ValueString()+") could not be revoked: "+err.Error()+
+					". Revoke it (DELETE /mcp-servers/"+old.ServerID.ValueString()+"/grants/"+old.ID.ValueString()+") it is no longer tracked by Terraform.")
+		}
+	}
+}
+
+// isAlreadyExists reports whether err is a 409 already_exists problem.
+func isAlreadyExists(err error) bool {
+	var ae *client.APIError
+	return errors.As(err, &ae) && ae.Status == http.StatusConflict && ae.Code == "already_exists"
+}
+
+// sameStrings reports whether a and b hold the same strings, ignoring order.
+func sameStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	x := append([]string{}, a...)
+	y := append([]string{}, b...)
+	sort.Strings(x)
+	sort.Strings(y)
+	for i := range x {
+		if x[i] != y[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func (r *mcpGrantResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {

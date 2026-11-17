@@ -27,12 +27,13 @@ type fakeRolesAPI struct {
 	busy     string // non-empty: rename answers 409 precondition_failed (role_busy) with this detail
 	taken    bool   // rename answers 409 already_exists (the name is taken)
 
-	clock    int                         // each write moves the fake clock one minute
-	pools    map[string][]map[string]any // role -> pool entries
-	grants   map[string]map[string]any   // id -> grant
-	nextID   int
-	poolPuts []string // "role" for a write, "role:delete" for an empty one
-	grantOps []string // "add:role", "revoke:id"
+	clock       int                         // each write moves the fake clock one minute
+	pools       map[string][]map[string]any // role -> pool entries
+	grants      map[string]map[string]any   // id -> grant
+	nextID      int
+	poolPuts    []string // "role" for a write, "role:delete" for an empty one
+	grantOps    []string // "add:role", "revoke:id"
+	revokeFails bool     // revoking a grant answers 500
 }
 
 func (f *fakeRolesAPI) now() string {
@@ -163,6 +164,12 @@ func (f *fakeRolesAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodPost && p == "/mcp-servers/mcs_1/grants":
 		var in map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&in)
+		for _, ex := range f.grants { // UNIQUE (server_id, space_id, role)
+			if ex["space_id"] == in["space_id"] && ex["role"] == in["role"] {
+				f.problem(w, http.StatusConflict, "already_exists", "grant exists")
+				return
+			}
+		}
 		f.nextID++
 		id := "mcg_" + strconv.Itoa(f.nextID)
 		g := map[string]any{"id": id, "server_id": "mcs_1", "space_id": in["space_id"], "role": in["role"], "tools": []string{}}
@@ -172,6 +179,10 @@ func (f *fakeRolesAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodDelete && strings.HasPrefix(p, "/mcp-servers/mcs_1/grants/"):
 		id := strings.TrimPrefix(p, "/mcp-servers/mcs_1/grants/")
 		f.grantOps = append(f.grantOps, "revoke:"+id)
+		if f.revokeFails {
+			f.problem(w, http.StatusInternalServerError, "internal", "revoke failed")
+			return
+		}
 		delete(f.grants, id)
 		w.WriteHeader(http.StatusNoContent)
 	case r.Method == http.MethodDelete && strings.HasPrefix(p, "/spaces/spc_1/roles/"):
@@ -381,6 +392,50 @@ func TestSpaceRolePoolAndGrantRetarget(t *testing.T) {
 					t.Errorf("grant calls = %s", got)
 				}
 			}, Config: roleDependentsHCL(url, "implementor", "other", "other"), PlanOnly: true},
+		},
+	})
+}
+
+// When the old grant cannot be revoked after the new one was added, the new grant is still saved in state (an error names
+// the old one), so the next apply converges instead of adding the role's grant again and hitting the uniqueness conflict.
+func TestSpaceRoleGrantRetargetRevokeFailureConverges(t *testing.T) {
+	f, url := newFakeRoles(t)
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{Config: roleDependentsHCL(url, "implementor", "", "")},
+			{PreConfig: func() { f.revokeFails = true },
+				Config:      roleDependentsHCL(url, "implementor", "", "other"),
+				ExpectError: regexp.MustCompile(`(?s)old\s+MCP\s+grant.*mcg_1`)},
+			{PreConfig: func() {
+				if g := f.grants["mcg_2"]; g == nil || g["role"] != "other" {
+					t.Errorf("grants = %v, want the new grant added", f.grants)
+				}
+				f.revokeFails = false
+			}, Config: roleDependentsHCL(url, "implementor", "", "other"),
+				Check: resource.TestCheckResourceAttr(grantRes, "id", "mcg_2")},
+			{Config: roleDependentsHCL(url, "implementor", "", "other"), PlanOnly: true},
+		},
+	})
+}
+
+// A grant for the new role that already exists (409 already_exists) is adopted instead of failing, and the old one revoked.
+func TestSpaceRoleGrantRetargetAdoptsExisting(t *testing.T) {
+	f, url := newFakeRoles(t)
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{Config: roleDependentsHCL(url, "implementor", "", "")},
+			{PreConfig: func() {
+				f.grants["mcg_9"] = map[string]any{"id": "mcg_9", "server_id": "mcs_1", "space_id": "spc_1", "role": "other", "tools": []string{}}
+			}, Config: roleDependentsHCL(url, "implementor", "", "other"),
+				Check: resource.TestCheckResourceAttr(grantRes, "id", "mcg_9")},
+			{Config: roleDependentsHCL(url, "implementor", "", "other"), PlanOnly: true},
+			{PreConfig: func() {
+				if _, ok := f.grants["mcg_1"]; ok {
+					t.Errorf("old grant not revoked: %v", f.grants)
+				}
+			}, Config: roleDependentsHCL(url, "implementor", "", "other"), PlanOnly: true},
 		},
 	})
 }

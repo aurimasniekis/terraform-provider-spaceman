@@ -16,7 +16,7 @@ All notable changes to this provider are documented here. The format is based on
   delete and create.
 - `spaceman_mcp_grant.role` and `spaceman_space_role_pool.role` no longer force a replacement. A grant whose role was
   rewritten by a rename is left alone; a grant pointed at another role is added for the new role and then the old one revoked, so the role is never without a grant. A pool is written under
-  the new role name and the old name's pool is removed if it is still there. `id` is known after apply when `role` changes. Swapping the roles of two pool resources in one apply can remove the other's pool: do it in two applies.
+  the new role name and the old name's pool is removed if it is still there. `id` is known after apply when `role` changes. Swapping the roles of two pool resources in one apply can remove the other's pool: do it in two applies. If the old grant can't be revoked after the new one was added, the new grant is still saved in state and the error names the old grant to revoke; a grant for the role that already exists is adopted.
 - `spaceman_space_role.name` is validated like the pool's `role` (lower case, digits and `-`).
 - The schedule, knowledge base, dream, human permission and human policy updates read the object's current version when
   a role reference changes, since a role rename bumps their version in central.

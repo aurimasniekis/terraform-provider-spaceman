@@ -408,6 +408,20 @@ func (c *Client) GetMCPGrant(ctx context.Context, serverID, grantID string) (*MC
 	return nil, notFound("GET /mcp-servers/{server_id}/grants", "grant "+grantID)
 }
 
+// FindMCPGrantByRole finds the grant of a server for a space and role (a not-found error when there is none).
+func (c *Client) FindMCPGrantByRole(ctx context.Context, serverID, spaceID, role string) (*MCPGrant, error) {
+	var out items[*MCPGrant]
+	if err := c.get(ctx, "/mcp-servers/"+esc(serverID)+"/grants", &out); err != nil {
+		return nil, err
+	}
+	for _, g := range out.Items {
+		if g.SpaceID == spaceID && g.Role == role {
+			return g, nil
+		}
+	}
+	return nil, notFound("GET /mcp-servers/{server_id}/grants", "grant of role "+role)
+}
+
 // AddMCPGrant is POST /mcp-servers/{id}/grants.
 func (c *Client) AddMCPGrant(ctx context.Context, serverID string, in MCPGrantInput) (*MCPGrant, error) {
 	var out MCPGrant
