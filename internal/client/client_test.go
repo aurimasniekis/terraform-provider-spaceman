@@ -323,3 +323,23 @@ func TestDraftHelpers(t *testing.T) {
 		t.Fatal("empty helpers")
 	}
 }
+
+func TestFollowSpaceRoleRename(t *testing.T) {
+	r := func(from, to string) *SpaceRoleRename { return &SpaceRoleRename{From: from, To: to} }
+	for name, c := range map[string]struct {
+		renames []*SpaceRoleRename // newest first
+		from    string
+		want    string
+	}{
+		"none":      {nil, "a", "a"},
+		"one":       {[]*SpaceRoleRename{r("a", "b")}, "a", "b"},
+		"chain":     {[]*SpaceRoleRename{r("b", "c"), r("a", "b")}, "a", "c"},
+		"back":      {[]*SpaceRoleRename{r("b", "a"), r("a", "b")}, "a", "a"},
+		"reused":    {[]*SpaceRoleRename{r("a", "c"), r("a", "b")}, "a", "c"},
+		"unrelated": {[]*SpaceRoleRename{r("x", "y")}, "a", "a"},
+	} {
+		if got := FollowSpaceRoleRename(c.renames, c.from); got != c.want {
+			t.Errorf("%s: got %s, want %s", name, got, c.want)
+		}
+	}
+}

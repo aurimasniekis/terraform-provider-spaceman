@@ -151,10 +151,13 @@ func (r *spaceRoleResource) Read(ctx context.Context, req resource.ReadRequest, 
 	if client.IsNotFound(err) {
 		// Renamed outside Terraform: follow the rename so the role shows as an in-place `name` change back to the
 		// configured value, not as a resource to create. An older SpaceMan has no rename history: the role is gone.
-		if renames, lerr := r.c.ListSpaceRoleRenames(ctx, m.SpaceID.ValueString()); lerr == nil {
-			if now := client.FollowSpaceRoleRename(renames, m.Name.ValueString()); now != m.Name.ValueString() {
-				sr, err = r.c.GetSpaceRole(ctx, m.SpaceID.ValueString(), now)
-			}
+		renames, lerr := r.c.ListSpaceRoleRenames(ctx, m.SpaceID.ValueString())
+		if lerr != nil && !client.IsNotFound(lerr) {
+			addAPIError(&resp.Diagnostics, "Could not read the space's role renames", lerr)
+			return
+		}
+		if now := client.FollowSpaceRoleRename(renames, m.Name.ValueString()); lerr == nil && now != m.Name.ValueString() {
+			sr, err = r.c.GetSpaceRole(ctx, m.SpaceID.ValueString(), now)
 		}
 	}
 	if client.IsNotFound(err) {

@@ -283,15 +283,27 @@ func (c *Client) ListSpaceRoleRenames(ctx context.Context, spaceID string) ([]*S
 	return out.Items, c.get(ctx, "/spaces/"+esc(spaceID)+"/role-renames", &out)
 }
 
-// FollowSpaceRoleRename returns the name a role now carries after renames from name (oldest first), or name itself
-// when it was never renamed away.
+// FollowSpaceRoleRename returns the name a role now carries after renames from name, or name itself when it was never
+// renamed away. renames are newest first. Like central, it starts at the latest rename away from name (the name may
+// have been reused since an earlier one) and follows the later renames forward.
 func FollowSpaceRoleRename(renames []*SpaceRoleRename, name string) string {
-	for i := len(renames) - 1; i >= 0; i-- {
-		if renames[i].From == name {
-			name = renames[i].To
+	start := -1
+	for i, r := range renames {
+		if r.From == name {
+			start = i
+			break
 		}
 	}
-	return name
+	if start < 0 {
+		return name
+	}
+	cur := renames[start].To
+	for j := start - 1; j >= 0; j-- {
+		if renames[j].From == cur {
+			cur = renames[j].To
+		}
+	}
+	return cur
 }
 
 // DeleteSpaceRole is DELETE /spaces/{id}/roles/{name}.
