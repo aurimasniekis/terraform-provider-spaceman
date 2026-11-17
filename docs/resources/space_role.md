@@ -38,7 +38,7 @@ resource "spaceman_space_role" "implementor" {
 
 ### Required
 
-- `name` (String) Role name, lowercase (e.g. `implementor-backend`). Changing it renames the role in place (`POST /spaces/{id}/roles/{name}/rename`, SpaceMan 0.1.11 or later): live references to the role in the space follow it, and a role with live work is refused. Never a destroy and create. A `spaceman_mcp_grant` that references the role is replaced, since grants cannot be edited.
+- `name` (String) Role name, lowercase (e.g. `implementor-backend`). Changing it renames the role in place (`POST /spaces/{id}/roles/{name}/rename`, SpaceMan 0.1.11 or later): live references to the role in the space follow it, and a role with live work is refused. Never a destroy and create. A `spaceman_mcp_grant` and a `spaceman_space_role_pool` that reference the role are updated in place and keep their ids.
 - `space_id` (String) The space.
 - `template_id` (String) The role template (`rtp_…`).
 

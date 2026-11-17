@@ -325,20 +325,30 @@ func TestDraftHelpers(t *testing.T) {
 }
 
 func TestFollowSpaceRoleRename(t *testing.T) {
-	r := func(from, to string) *SpaceRoleRename { return &SpaceRoleRename{From: from, To: to} }
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	// r builds a rename made n hours after base.
+	r := func(from, to string, n int) *SpaceRoleRename {
+		return &SpaceRoleRename{From: from, To: to, RenamedAt: base.Add(time.Duration(n) * time.Hour)}
+	}
+	seen := base // the role was last seen at base
 	for name, c := range map[string]struct {
 		renames []*SpaceRoleRename // newest first
 		from    string
+		since   time.Time
 		want    string
 	}{
-		"none":      {nil, "a", "a"},
-		"one":       {[]*SpaceRoleRename{r("a", "b")}, "a", "b"},
-		"chain":     {[]*SpaceRoleRename{r("b", "c"), r("a", "b")}, "a", "c"},
-		"back":      {[]*SpaceRoleRename{r("b", "a"), r("a", "b")}, "a", "a"},
-		"reused":    {[]*SpaceRoleRename{r("a", "c"), r("a", "b")}, "a", "c"},
-		"unrelated": {[]*SpaceRoleRename{r("x", "y")}, "a", "a"},
+		"none":      {nil, "a", seen, "a"},
+		"one":       {[]*SpaceRoleRename{r("a", "b", 1)}, "a", seen, "b"},
+		"chain":     {[]*SpaceRoleRename{r("b", "c", 2), r("a", "b", 1)}, "a", seen, "c"},
+		"back":      {[]*SpaceRoleRename{r("b", "a", 2), r("a", "b", 1)}, "a", seen, "a"},
+		"reused":    {[]*SpaceRoleRename{r("a", "c", 2), r("a", "b", 1)}, "a", seen, "c"},
+		"unrelated": {[]*SpaceRoleRename{r("x", "y", 1)}, "a", seen, "a"},
+		// A rename from before the role was last seen belongs to an earlier holder of the name.
+		"old rename":    {[]*SpaceRoleRename{r("a", "b", -5)}, "a", seen, "a"},
+		"same instant":  {[]*SpaceRoleRename{r("a", "b", 0)}, "a", seen, "a"},
+		"nothing known": {[]*SpaceRoleRename{r("a", "b", 1)}, "a", time.Time{}, "a"},
 	} {
-		if got := FollowSpaceRoleRename(c.renames, c.from); got != c.want {
+		if got := FollowSpaceRoleRename(c.renames, c.from, c.since); got != c.want {
 			t.Errorf("%s: got %s, want %s", name, got, c.want)
 		}
 	}

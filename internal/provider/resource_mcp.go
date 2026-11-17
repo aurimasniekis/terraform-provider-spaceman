@@ -214,15 +214,18 @@ func (r *mcpGrantResource) Metadata(_ context.Context, req resource.MetadataRequ
 
 func (r *mcpGrantResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "Grants an MCP server to a space role (`POST/DELETE /mcp-servers/{id}/grants`). Grants cannot be edited: any change " +
-			"revokes the grant and adds a new one. A revoked grant refuses the affected runs' next call.",
+		MarkdownDescription: "Grants an MCP server to a space role (`POST/DELETE /mcp-servers/{id}/grants`). Grants cannot be edited: a change of " +
+			"`tools`, the server or the space revokes the grant and adds a new one, and a revoked grant refuses the affected runs' next call. " +
+			"A change of `role` is applied in place (see `role`).",
 		Attributes: map[string]schema.Attribute{
-			"id":        idAttr("The grant ID."),
+			"id": schema.StringAttribute{Computed: true, MarkdownDescription: "The grant ID. Stays when `role` follows a rename of the space role; a new grant has a new ID.",
+				PlanModifiers: []planmodifier.String{useStateUnlessChanges{attr: "role"}}},
 			"server_id": requiredReplace("The MCP server."),
 			"space_id":  requiredReplace("The space."),
 			"role": schema.StringAttribute{Optional: true, Computed: true, Default: stringdefault.StaticString("*"),
-				MarkdownDescription: "A space role name, or `*` (default) for every role. Changing it replaces the grant, so renaming a `spaceman_space_role` this references revokes the grant and adds one for the new name; a rename needs no live runs of the role, so none sees the gap.",
-				PlanModifiers:       []planmodifier.String{stringplanmodifier.RequiresReplace()}},
+				MarkdownDescription: "A space role name, or `*` (default) for every role. Renaming the `spaceman_space_role` this references " +
+					"changes nothing in SpaceMan: the rename moves the grant with the role, the grant keeps its ID and no run is without it. " +
+					"Pointing `role` at a different role revokes the grant and adds one for the new role."},
 			"tools": schema.SetAttribute{Optional: true, Computed: true, ElementType: types.StringType,
 				MarkdownDescription: "Subset of the server's tools; empty grants all of them.",
 				PlanModifiers:       []planmodifier.Set{setplanmodifier.RequiresReplace(), setplanmodifier.UseStateForUnknown()}},
@@ -272,8 +275,40 @@ func (r *mcpGrantResource) Read(ctx context.Context, req resource.ReadRequest, r
 	resp.Diagnostics.Append(resp.State.Set(ctx, &m)...)
 }
 
-func (r *mcpGrantResource) Update(_ context.Context, _ resource.UpdateRequest, resp *resource.UpdateResponse) {
-	resp.Diagnostics.AddError("MCP grants cannot be updated", "Every attribute of a grant forces a replacement; this is a provider bug.")
+// Update applies a change of `role` (the only attribute that is not a replacement). When central already rewrote the grant
+// to the planned role, in the transaction that renamed the space role, nothing is left to do: the grant keeps its ID and
+// is never without its role. Otherwise the grant points at a different role: revoke it and add one for the new role.
+func (r *mcpGrantResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	var m, old mcpGrantModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &m)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &old)...)
+	tools := stringSet(ctx, m.Tools, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	g, err := r.c.GetMCPGrant(ctx, old.ServerID.ValueString(), old.ID.ValueString())
+	if err == nil && g.Role == m.Role.ValueString() {
+		r.toModel(ctx, g, &m)
+		resp.Diagnostics.Append(resp.State.Set(ctx, &m)...)
+		return
+	}
+	if err != nil && !client.IsNotFound(err) {
+		addAPIError(&resp.Diagnostics, "Could not read the MCP grant", err)
+		return
+	}
+	if err == nil {
+		if err := r.c.RevokeMCPGrant(ctx, old.ServerID.ValueString(), old.ID.ValueString()); err != nil && !client.IsNotFound(err) {
+			addAPIError(&resp.Diagnostics, "Could not revoke the MCP grant", err)
+			return
+		}
+	}
+	g, err = r.c.AddMCPGrant(ctx, m.ServerID.ValueString(), client.MCPGrantInput{SpaceID: m.SpaceID.ValueString(), Role: m.Role.ValueString(), Tools: tools})
+	if err != nil {
+		addAPIError(&resp.Diagnostics, "Could not grant the MCP server", err)
+		return
+	}
+	r.toModel(ctx, g, &m)
+	resp.Diagnostics.Append(resp.State.Set(ctx, &m)...)
 }
 
 func (r *mcpGrantResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {

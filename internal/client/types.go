@@ -245,6 +245,7 @@ type SpaceRole struct {
 	Skills       []SkillRef        `json:"skills"`
 	Revision     int64             `json:"revision"`
 	Version      int64             `json:"version"`
+	UpdatedAt    time.Time         `json:"updated_at"`
 }
 
 // SpaceRoleInput is PUT /spaces/{id}/roles/{name} (an upsert).
@@ -266,11 +267,12 @@ type RenameSpaceRoleInput struct {
 
 // SpaceRoleRename is one rename of a space role; NodeState is pending, failed, done or not_needed.
 type SpaceRoleRename struct {
-	ID        string `json:"id"`
-	SpaceID   string `json:"space_id"`
-	From      string `json:"from"`
-	To        string `json:"to"`
-	NodeState string `json:"node_state"`
+	ID        string    `json:"id"`
+	SpaceID   string    `json:"space_id"`
+	From      string    `json:"from"`
+	To        string    `json:"to"`
+	NodeState string    `json:"node_state"`
+	RenamedAt time.Time `json:"renamed_at"`
 }
 
 // RenamedSpaceRole is the renamed role with the rename that renamed it.

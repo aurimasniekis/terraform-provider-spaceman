@@ -7,7 +7,7 @@ description: |-
 
 # spaceman_mcp_grant (Resource)
 
-Grants an MCP server to a space role (`POST/DELETE /mcp-servers/{id}/grants`). Grants cannot be edited: any change revokes the grant and adds a new one. A revoked grant refuses the affected runs' next call.
+Grants an MCP server to a space role (`POST/DELETE /mcp-servers/{id}/grants`). Grants cannot be edited: a change of `tools`, the server or the space revokes the grant and adds a new one, and a revoked grant refuses the affected runs' next call. A change of `role` is applied in place (see `role`).
 
 ## Example Usage
 
@@ -30,12 +30,12 @@ resource "spaceman_mcp_grant" "tracker_read" {
 
 ### Optional
 
-- `role` (String) A space role name, or `*` (default) for every role. Changing it replaces the grant, so renaming a `spaceman_space_role` this references revokes the grant and adds one for the new name; a rename needs no live runs of the role, so none sees the gap.
+- `role` (String) A space role name, or `*` (default) for every role. Renaming the `spaceman_space_role` this references changes nothing in SpaceMan: the rename moves the grant with the role, the grant keeps its ID and no run is without it. Pointing `role` at a different role revokes the grant and adds one for the new role.
 - `tools` (Set of String) Subset of the server's tools; empty grants all of them.
 
 ### Read-Only
 
-- `id` (String) The grant ID.
+- `id` (String) The grant ID. Stays when `role` follows a rename of the space role; a new grant has a new ID.
 
 ## Import
 

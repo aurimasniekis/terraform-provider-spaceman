@@ -33,8 +33,8 @@ func nodeMovedRoleMemory(t *testing.T) {
 }
 
 // roleRenameAccHCL is a role with a dependent of every kind that references it by name. `addr` is the role's resource
-// address, `name` its name.
-func roleRenameAccHCL(sfx, slug, nodeID, addr, name string) string {
+// address, `name` its name, `keeper` the name of the knowledge base's keeper role.
+func roleRenameAccHCL(sfx, slug, nodeID, addr, name, keeper string) string {
 	return fmt.Sprintf(`
 resource "spaceman_space" "s" {
   slug             = %[2]q
@@ -70,7 +70,7 @@ resource "spaceman_space_role" "%[4]s" {
 
 resource "spaceman_space_role" "keeper" {
   space_id    = spaceman_space.s.id
-  name        = "keeper"
+  name        = %[6]q
   template_id = spaceman_role_template.kb.id
 }
 
@@ -98,6 +98,8 @@ resource "spaceman_knowledge_base" "k" {
   repo       = "kb/docs"
   space_role = spaceman_space_role.keeper.name
   validator  = ["python3", "tools/kb.py", "check"]
+
+  allowed_roles = [spaceman_space_role.%[4]s.name]
 }
 
 resource "spaceman_dream" "d" {
@@ -135,18 +137,40 @@ resource "spaceman_mcp_grant" "g" {
   space_id  = spaceman_space.s.id
   role      = spaceman_space_role.%[4]s.name
 }
-`, sfx, slug, nodeID, addr, name)
+resource "spaceman_account" "a" {
+  name              = "tf-rn-%[1]s"
+  kind              = "anthropic_api_key"
+  secret_wo         = "sk-test-%[1]s"
+  secret_wo_version = 1
+}
+
+resource "spaceman_space_accounts" "b" {
+  space_id = spaceman_space.s.id
+  binding = [{
+    account_id = spaceman_account.a.id
+    default    = true
+  }]
+}
+
+resource "spaceman_space_role_pool" "p" {
+  space_id   = spaceman_space.s.id
+  role       = spaceman_space_role.%[4]s.name
+  account    = [{ account_id = spaceman_account.a.id }]
+  depends_on = [spaceman_space_accounts.b]
+}
+`, sfx, slug, nodeID, addr, name, keeper)
 }
 
 // TestAccSpaceRoleRename covers renaming a role in place (SpaceMan 0.1.11 or later): dependents that reference it by
-// name follow in the same apply, the role is never destroyed, a rename made outside Terraform is an in-place name change
+// name follow in the same apply (the grant and the pool, which hold ids and state of their own, are updated in place and
+// survive with the same ids), the role is never destroyed, a rename made outside Terraform is an in-place name change
 // back, and renaming the resource address as well plans no destroy.
 func TestAccSpaceRoleRename(t *testing.T) {
 	testAccPreCheck(t)
 	nodeSpeaksRoleRenameProtocol(t)
 	sfx, slug := suffix(), "tf-rn-"+suffix()
 	const r = "spaceman_space_role.implementor"
-	var spaceID string
+	var spaceID, grantID string
 	var revision int64
 	noDestroy := func(addrs ...string) resource.ConfigPlanChecks {
 		var cs []plancheck.PlanCheck
@@ -176,9 +200,36 @@ func TestAccSpaceRoleRename(t *testing.T) {
 			resource.TestCheckResourceAttr("spaceman_human_action_type_permission.p", "agent_roles.0", name),
 			resource.TestCheckResourceAttr("spaceman_human_action_policy.q", "successor_role", name),
 			resource.TestCheckResourceAttr("spaceman_mcp_grant.g", "role", name),
+			resource.TestCheckResourceAttr("spaceman_space_role_pool.p", "role", name),
+			resource.TestCheckResourceAttr("spaceman_knowledge_base.k", "allowed_roles.0", name),
 		)
 	}
-	hcl := func(addr, name string) string { return roleRenameAccHCL(sfx, slug, acc.nodeA.ID, addr, name) }
+	// The grant and the pool survive a rename: the grant has the same id (not a revoked grant and a new one), the pool is
+	// there under the role's new name (its id is `<space_id>/<role>`, so it follows the name).
+	survive := func(s *terraform.State) error {
+		if got := stateAttr(s, "spaceman_mcp_grant.g", "id"); got != grantID {
+			return fmt.Errorf("grant id = %s, want the original %s: it was replaced", got, grantID)
+		}
+		if _, err := acc.client.GetMCPGrant(context.Background(), stateAttr(s, "spaceman_mcp_grant.g", "server_id"), grantID); err != nil {
+			return fmt.Errorf("the grant did not survive: %w", err)
+		}
+		role := stateAttr(s, "spaceman_space_role_pool.p", "role")
+		if got := stateAttr(s, "spaceman_space_role_pool.p", "id"); got != spaceID+"/"+role {
+			return fmt.Errorf("pool id = %s, want %s/%s", got, spaceID, role)
+		}
+		pools, _, err := acc.client.RolePools(context.Background(), spaceID)
+		if err != nil {
+			return err
+		}
+		if _, ok := rolePoolOf(pools, role); !ok {
+			return fmt.Errorf("role %s has no pool: %v", role, pools)
+		}
+		return nil
+	}
+	hclK := func(addr, name, keeper string) string {
+		return roleRenameAccHCL(sfx, slug, acc.nodeA.ID, addr, name, keeper)
+	}
+	hcl := func(addr, name string) string { return hclK(addr, name, "keeper") }
 	accSteps(t,
 		resource.TestStep{
 			Config: hcl("implementor", "implementor"),
@@ -191,18 +242,23 @@ func TestAccSpaceRoleRename(t *testing.T) {
 					}
 					return err
 				},
+				func(s *terraform.State) error {
+					grantID = stateAttr(s, "spaceman_mcp_grant.g", "id")
+					return nil
+				},
 				dependentsFollow("implementor")),
 		},
 		// Renamed in one apply: the role and its dependents update in place (the grant, which cannot be edited, is
 		// replaced). The role's revision keeps growing, so it was never destroyed and created again.
 		resource.TestStep{
-			Config:           hcl("implementor", "implementor-hard"),
-			ConfigPlanChecks: noDestroy(r, "spaceman_schedule.s", "spaceman_dream.d", "spaceman_human_action_type_permission.p", "spaceman_human_action_policy.q"),
+			Config: hcl("implementor", "implementor-hard"),
+			ConfigPlanChecks: noDestroy(r, "spaceman_schedule.s", "spaceman_dream.d", "spaceman_human_action_type_permission.p", "spaceman_human_action_policy.q",
+				"spaceman_mcp_grant.g", "spaceman_space_role_pool.p", "spaceman_knowledge_base.k"),
 			Check: resource.ComposeAggregateTestCheckFunc(
 				func(s *terraform.State) error {
 					return resource.TestCheckResourceAttr(r, "id", spaceID+"/implementor-hard")(s)
 				},
-				roleIs("implementor-hard"), dependentsFollow("implementor-hard")),
+				roleIs("implementor-hard"), dependentsFollow("implementor-hard"), survive),
 		},
 		resource.TestStep{Config: hcl("implementor", "implementor-hard"), PlanOnly: true},
 		// Renamed outside Terraform: an in-place name change back to the configured value, never a create.
@@ -216,12 +272,22 @@ func TestAccSpaceRoleRename(t *testing.T) {
 			},
 			Config:           hcl("implementor", "implementor-hard"),
 			ConfigPlanChecks: noDestroy(r),
-			Check:            resource.ComposeAggregateTestCheckFunc(roleIs("implementor-hard"), dependentsFollow("implementor-hard")),
+			Check:            resource.ComposeAggregateTestCheckFunc(roleIs("implementor-hard"), dependentsFollow("implementor-hard"), survive),
 		},
 		resource.TestStep{Config: hcl("implementor", "implementor-hard"), PlanOnly: true},
+		// The KB's keeper is renamed: `space_role` follows in place, and the KB keeps its id.
+		resource.TestStep{
+			PreConfig:        func() { nodeMovedRoleMemory(t) },
+			Config:           hclK("implementor", "implementor-hard", "keeper-2"),
+			ConfigPlanChecks: noDestroy("spaceman_space_role.keeper", "spaceman_knowledge_base.k"),
+			Check: resource.ComposeAggregateTestCheckFunc(
+				resource.TestCheckResourceAttr("spaceman_knowledge_base.k", "space_role", "keeper-2"),
+				resource.TestCheckResourceAttr("spaceman_knowledge_base.k", "allowed_roles.0", "implementor-hard"), survive),
+		},
+		resource.TestStep{Config: hclK("implementor", "implementor-hard", "keeper-2"), PlanOnly: true},
 		// Renaming the resource address as well (a `moved` block) plans no destroy.
 		resource.TestStep{
-			Config: hcl("implementor_hard", "implementor-hard") + `
+			Config: hclK("implementor_hard", "implementor-hard", "keeper-2") + `
 moved {
   from = spaceman_space_role.implementor
   to   = spaceman_space_role.implementor_hard

@@ -8,11 +8,16 @@ All notable changes to this provider are documented here. The format is based on
 ### Changed
 - `spaceman_space_role.name`: changing it renames the role in place (`POST /spaces/{id}/roles/{name}/rename`) instead of
   destroying and creating it; `id` follows the new name. Live references in the space follow the rename in central:
-  schedules, knowledge bases, dreams, human permissions and the human policy successor update in place, and a
-  `spaceman_mcp_grant` that references the role is replaced (grants cannot be edited). A role with live work is refused
-  with the blockers listed. A rename made outside Terraform shows as an in-place `name` change back to the configured
-  value. Needs SpaceMan 0.1.11 or later: an older SpaceMan fails the rename with a clear error and never falls back to
+  schedules, knowledge bases, dreams, human permissions, the human policy successor, MCP grants and role pools update
+  in place and keep their ids; nothing that references the role is revoked or removed before the rename, so a rename
+  refused because the role has live work leaves them as they were. A rename refused with a conflict shows the reason
+  and what to do. A rename made outside Terraform shows as an in-place `name` change back to the configured value, but
+  only when it happened after the role was last read: a name reused by a new role is not followed to an old rename. Needs SpaceMan 0.1.11 or later: an older SpaceMan fails the rename with a clear error and never falls back to
   delete and create.
+- `spaceman_mcp_grant.role` and `spaceman_space_role_pool.role` no longer force a replacement. A grant whose role was
+  rewritten by a rename is left alone; a grant pointed at another role is revoked and added again. A pool is written under
+  the new role name and the old name's pool is removed if it is still there. `id` is known after apply when `role` changes.
+- `spaceman_space_role.name` is validated like the pool's `role` (lower case, digits and `-`).
 - The schedule, knowledge base, dream, human permission and human policy updates read the object's current version when
   a role reference changes, since a role rename bumps their version in central.
 
