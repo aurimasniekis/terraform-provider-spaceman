@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"sort"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -302,10 +303,22 @@ func (r *mcpGrantResource) Update(ctx context.Context, req resource.UpdateReques
 	oldExists := err == nil
 	// Add the new grant before revoking the old one: the role is never without a grant.
 	g, err = r.c.AddMCPGrant(ctx, m.ServerID.ValueString(), client.MCPGrantInput{SpaceID: m.SpaceID.ValueString(), Role: m.Role.ValueString(), Tools: tools})
-	if err != nil && client.IsConflict(err) && isAlreadyExists(err) {
-		// A grant for the role already exists (an earlier apply added it and could not revoke the old one): adopt it.
-		if ex, ferr := r.c.FindMCPGrantByRole(ctx, m.ServerID.ValueString(), m.SpaceID.ValueString(), m.Role.ValueString()); ferr == nil && sameStrings(ex.Tools, tools) {
+	if err != nil && isAlreadyExists(err) {
+		// A grant for the role already exists (an earlier apply added it and could not revoke the old one): adopt it
+		// when it has the planned tools, otherwise say what is in the way.
+		ex, ferr := r.c.FindMCPGrantByRole(ctx, m.ServerID.ValueString(), m.SpaceID.ValueString(), m.Role.ValueString())
+		switch {
+		case ferr != nil:
+			resp.Diagnostics.AddError("Could not grant the MCP server",
+				"a grant for role "+m.Role.ValueString()+" on this server already exists, and looking it up failed: "+ferr.Error()+"; import it or revoke it")
+			return
+		case sameStrings(ex.Tools, tools):
 			g, err = ex, nil
+		default:
+			resp.Diagnostics.AddError("Could not grant the MCP server",
+				"a grant "+ex.ID+" for role "+m.Role.ValueString()+" on this server already exists with tools ["+strings.Join(ex.Tools, ", ")+
+					"], not the planned ["+strings.Join(tools, ", ")+"]; import it or revoke it")
+			return
 		}
 	}
 	if err != nil {
@@ -320,7 +333,7 @@ func (r *mcpGrantResource) Update(ctx context.Context, req resource.UpdateReques
 			resp.Diagnostics.AddError("Could not revoke the old MCP grant",
 				"The grant for role "+m.Role.ValueString()+" was added and is saved in state, but the old grant "+old.ID.ValueString()+
 					" (role "+old.Role.ValueString()+") could not be revoked: "+err.Error()+
-					". Revoke it (DELETE /mcp-servers/"+old.ServerID.ValueString()+"/grants/"+old.ID.ValueString()+") it is no longer tracked by Terraform.")
+					". Revoke it (DELETE /mcp-servers/"+old.ServerID.ValueString()+"/grants/"+old.ID.ValueString()+"); it is no longer tracked by Terraform.")
 		}
 	}
 }

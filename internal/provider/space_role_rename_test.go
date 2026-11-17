@@ -412,7 +412,8 @@ func TestSpaceRoleGrantRetargetRevokeFailureConverges(t *testing.T) {
 					t.Errorf("grants = %v, want the new grant added", f.grants)
 				}
 				f.revokeFails = false
-			}, Config: roleDependentsHCL(url, "implementor", "", "other"),
+			}, Config: roleDependentsHCL(url, "implementor", "", "other"), PlanOnly: true}, // state already holds mcg_2: nothing to do
+			{Config: roleDependentsHCL(url, "implementor", "", "other"),
 				Check: resource.TestCheckResourceAttr(grantRes, "id", "mcg_2")},
 			{Config: roleDependentsHCL(url, "implementor", "", "other"), PlanOnly: true},
 		},
@@ -436,6 +437,21 @@ func TestSpaceRoleGrantRetargetAdoptsExisting(t *testing.T) {
 					t.Errorf("old grant not revoked: %v", f.grants)
 				}
 			}, Config: roleDependentsHCL(url, "implementor", "", "other"), PlanOnly: true},
+		},
+	})
+}
+
+// An existing grant for the new role with different tools is not adopted: the apply fails and names it.
+func TestSpaceRoleGrantRetargetDoesNotAdoptDifferentTools(t *testing.T) {
+	f, url := newFakeRoles(t)
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{Config: roleDependentsHCL(url, "implementor", "", "")},
+			{PreConfig: func() {
+				f.grants["mcg_9"] = map[string]any{"id": "mcg_9", "server_id": "mcs_1", "space_id": "spc_1", "role": "other", "tools": []string{"x"}}
+			}, Config: roleDependentsHCL(url, "implementor", "", "other"),
+				ExpectError: regexp.MustCompile(`(?s)mcg_9.*already\s+exists\s+with\s+tools\s+\[x\]`)},
 		},
 	})
 }
