@@ -296,16 +296,18 @@ func (r *mcpGrantResource) Update(ctx context.Context, req resource.UpdateReques
 		addAPIError(&resp.Diagnostics, "Could not read the MCP grant", err)
 		return
 	}
-	if err == nil {
-		if err := r.c.RevokeMCPGrant(ctx, old.ServerID.ValueString(), old.ID.ValueString()); err != nil && !client.IsNotFound(err) {
-			addAPIError(&resp.Diagnostics, "Could not revoke the MCP grant", err)
-			return
-		}
-	}
+	oldExists := err == nil
+	// Add the new grant before revoking the old one: the role is never without a grant.
 	g, err = r.c.AddMCPGrant(ctx, m.ServerID.ValueString(), client.MCPGrantInput{SpaceID: m.SpaceID.ValueString(), Role: m.Role.ValueString(), Tools: tools})
 	if err != nil {
 		addAPIError(&resp.Diagnostics, "Could not grant the MCP server", err)
 		return
+	}
+	if oldExists {
+		if err := r.c.RevokeMCPGrant(ctx, old.ServerID.ValueString(), old.ID.ValueString()); err != nil && !client.IsNotFound(err) {
+			addAPIError(&resp.Diagnostics, "Could not revoke the MCP grant", err)
+			return
+		}
 	}
 	r.toModel(ctx, g, &m)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &m)...)

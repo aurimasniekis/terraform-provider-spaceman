@@ -30,7 +30,7 @@ resource "spaceman_space_role_pool" "worker" {
 ### Required
 
 - `account` (Attributes Set) The pool's accounts. (see [below for nested schema](#nestedatt--account))
-- `role` (String) The role name (the space role's `name`): lower-case letters, digits and `-`, starting with a letter, at most 48 characters. Changing it updates the pool in place: the pool is written under the new name and the old name's pool is removed if it is still there. Renaming the `spaceman_space_role` this references moves the pool with it.
+- `role` (String) The role name (the space role's `name`): lower-case letters, digits and `-`, starting with a letter, at most 48 characters. Changing it updates the pool in place: the pool is written under the new name and the old name's pool is removed if it is still there. Renaming the `spaceman_space_role` this references moves the pool with it. Do not swap the roles of two pool resources in one apply: removing the old name's pool can remove the pool the other resource just wrote, so swap them in two applies.
 - `space_id` (String) The space.
 
 ### Read-Only

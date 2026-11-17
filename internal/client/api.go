@@ -285,19 +285,22 @@ func (c *Client) ListSpaceRoleRenames(ctx context.Context, spaceID string) ([]*S
 }
 
 // FollowSpaceRoleRename returns the name a role now carries after renames from name, or name itself when it was never
-// renamed away. renames are newest first. Like central, it starts at the latest rename away from name (the name may
-// have been reused since an earlier one) and follows the later renames forward. Only a rename made after since counts:
-// an older one belongs to an earlier holder of the name, not to the role the caller last saw (since is the zero time:
-// nothing is known about that role, so nothing is followed).
+// renamed away. renames are newest first. It starts at the earliest rename away from name made after since (the name may
+// have been reused since: the role the caller last saw is the one renamed first) and follows the later renames forward.
+// A rename made at or before since belongs to an earlier holder of the name (since is the zero time: nothing is known
+// about that role, so nothing is followed).
 func FollowSpaceRoleRename(renames []*SpaceRoleRename, name string, since time.Time) string {
 	start := -1
-	for i, r := range renames {
-		if r.From == name {
+	if since.IsZero() {
+		return name
+	}
+	for i := len(renames) - 1; i >= 0; i-- {
+		if renames[i].From == name && renames[i].RenamedAt.After(since) {
 			start = i
 			break
 		}
 	}
-	if start < 0 || since.IsZero() || !renames[start].RenamedAt.After(since) {
+	if start < 0 {
 		return name
 	}
 	cur := renames[start].To

@@ -73,7 +73,7 @@ func roleAttr() schema.StringAttribute {
 	return schema.StringAttribute{Required: true,
 		MarkdownDescription: "The role name (the space role's `name`): lower-case letters, digits and `-`, starting with a letter, at most 48 characters. " +
 			"Changing it updates the pool in place: the pool is written under the new name and the old name's pool is removed if it is still there. " +
-			"Renaming the `spaceman_space_role` this references moves the pool with it.",
+			"Renaming the `spaceman_space_role` this references moves the pool with it. Do not swap the roles of two pool resources in one apply: removing the old name's pool can remove the pool the other resource just wrote, so swap them in two applies.",
 		Validators: []validator.String{stringvalidator.RegexMatches(roleNameRE, "must match ^[a-z][a-z0-9-]{0,47}$")}}
 }
 

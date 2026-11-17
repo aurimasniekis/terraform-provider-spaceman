@@ -356,7 +356,7 @@ func TestSpaceRoleRenameRefusedLeavesPoolAndGrant(t *testing.T) {
 }
 
 // A pool or grant pointed at a different role (not a rename) is a real retarget: the pool is written under the new name
-// and the old name's pool removed; the grant is revoked and added again. Both are in-place updates, never replacements.
+// and the old name's pool removed; the grant is added for the new role and then the old one revoked. Both are in-place updates, never replacements.
 func TestSpaceRolePoolAndGrantRetarget(t *testing.T) {
 	f, url := newFakeRoles(t)
 	resource.UnitTest(t, resource.TestCase{
@@ -377,7 +377,7 @@ func TestSpaceRolePoolAndGrantRetarget(t *testing.T) {
 				if got := strings.Join(puts, ","); got != "implementor,other,implementor:delete" {
 					t.Errorf("pool writes = %s", got)
 				}
-				if got := strings.Join(ops, ","); got != "add:implementor,revoke:mcg_1,add:other" {
+				if got := strings.Join(ops, ","); got != "add:implementor,add:other,revoke:mcg_1" {
 					t.Errorf("grant calls = %s", got)
 				}
 			}, Config: roleDependentsHCL(url, "implementor", "other", "other"), PlanOnly: true},
