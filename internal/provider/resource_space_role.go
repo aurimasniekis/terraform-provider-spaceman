@@ -2,6 +2,8 @@ package provider
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -131,7 +133,7 @@ func (r *spaceRoleResource) Create(ctx context.Context, req resource.CreateReque
 	}
 	sr, err := r.c.SaveSpaceRole(ctx, m.SpaceID.ValueString(), m.Name.ValueString(), in)
 	if err != nil {
-		addAPIError(&resp.Diagnostics, "Could not configure the space role", err)
+		r.saveError(&resp.Diagnostics, "Could not configure the space role", err, &m)
 		return
 	}
 	r.toModel(sr, &m)
@@ -168,7 +170,7 @@ func (r *spaceRoleResource) Update(ctx context.Context, req resource.UpdateReque
 	}
 	sr, err := r.c.SaveSpaceRole(ctx, m.SpaceID.ValueString(), m.Name.ValueString(), in)
 	if err != nil {
-		addAPIError(&resp.Diagnostics, "Could not update the space role", err)
+		r.saveError(&resp.Diagnostics, "Could not update the space role", err, &m)
 		return
 	}
 	r.toModel(sr, &m)
@@ -194,4 +196,13 @@ func (r *spaceRoleResource) ImportState(ctx context.Context, req resource.Import
 	resp.Diagnostics.Append(resp.State.Set(ctx, &spaceRoleModel{ID: types.StringValue(req.ID), SpaceID: types.StringValue(p[0]), Name: types.StringValue(p[1]),
 		TemplateID: types.StringNull(), ProfileID: types.StringNull(), PromptID: types.StringNull(), PromptPin: types.StringNull(), Model: types.StringNull(),
 		Settings: types.MapNull(types.StringType), Instructions: types.StringNull(), Description: types.StringNull(), Skills: types.ListNull(skillRefType), Revision: types.Int64Null()})...)
+}
+
+// saveError reports a failed save; an older SpaceMan (before 0.1.11) rejects `description` with a 422.
+func (r *spaceRoleResource) saveError(diags *diag.Diagnostics, summary string, err error, m *spaceRoleModel) {
+	var ae *client.APIError
+	if errors.As(err, &ae) && ae.Status == 422 && m.Description.ValueString() != "" {
+		err = fmt.Errorf("%w\n\n`description` on a space role needs SpaceMan 0.1.11 or later", err)
+	}
+	addAPIError(diags, summary, err)
 }

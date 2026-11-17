@@ -5,7 +5,7 @@ All notable changes to this provider are documented here. The format is based on
 
 ## [Unreleased]
 
-Needs SpaceMan 0.1.11 or later for the items below (SpaceMan ADR-0095); an older SpaceMan answers with a clear error.
+Needs SpaceMan 0.1.11 or later for the items below (SpaceMan ADR-0095); an older SpaceMan answers the prompt PATCH with a clear error, and `spaceman_space_role.description` against one earlier than 0.1.11 fails with its 422 plus a hint.
 
 ### Changed
 - `spaceman_prompt`: `name` and `description` are changed in place (`PATCH /prompts/{id}`) instead of being refused. A

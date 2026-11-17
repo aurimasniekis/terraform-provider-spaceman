@@ -11,8 +11,10 @@ import (
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/knownvalue"
 	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
+	"github.com/hashicorp/terraform-plugin-testing/tfjsonpath"
 	"github.com/hashicorp/terraform-plugin-testing/tfversion"
 
 	"github.com/aurimasniekis/terraform-provider-spaceman/internal/client"
@@ -943,7 +945,7 @@ resource "spaceman_account" "c" {
 	)
 }
 
-func promptMetaHCL(sfx, spaceSlug, nodeID, name, desc, body, roleDesc string) string {
+func promptMetaHCL(sfx, spaceSlug, nodeID, name, desc, body, roleDesc, extra string) string {
 	return fmt.Sprintf(`
 resource "spaceman_space" "s" {
   slug             = %[2]q
@@ -958,6 +960,14 @@ resource "spaceman_prompt" "p" {
   kind        = "role"
   description = %[5]q
   body        = %[6]q
+  %[8]s
+}
+
+resource "spaceman_prompt" "base" {
+  slug = "tf-meta-base-%[1]s"
+  name = "Meta base"
+  kind = "general"
+  body = "Be careful."
 }
 
 resource "spaceman_role_template" "t" {
@@ -973,7 +983,7 @@ resource "spaceman_space_role" "r" {
   template_id = spaceman_role_template.t.id
   description = %[7]q
 }
-`, sfx, spaceSlug, nodeID, name, desc, body, roleDesc)
+`, sfx, spaceSlug, nodeID, name, desc, body, roleDesc, extra)
 }
 
 // A prompt's name and description change in place and publish nothing; a body change still publishes.
@@ -982,7 +992,10 @@ func TestAccPromptMetadataInPlace(t *testing.T) {
 	sfx, slug := suffix(), "tf-meta-"+suffix()
 	var id string
 	cfg := func(name, desc, body, roleDesc string) string {
-		return promptMetaHCL(sfx, slug, acc.nodeA.ID, name, desc, body, roleDesc)
+		return promptMetaHCL(sfx, slug, acc.nodeA.ID, name, desc, body, roleDesc, "")
+	}
+	cfgX := func(extra string) string {
+		return promptMetaHCL(sfx, slug, acc.nodeA.ID, "Name three", "Desc two", "Body two.", "", extra)
 	}
 	accSteps(t,
 		resource.TestStep{
@@ -995,6 +1008,11 @@ func TestAccPromptMetadataInPlace(t *testing.T) {
 		},
 		resource.TestStep{
 			Config: cfg("Name two", "Desc two", "Body one.", "Role desc"),
+			ConfigPlanChecks: resource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
+				plancheck.ExpectKnownValue("spaceman_prompt.p", tfjsonpath.New("latest_version"), knownvalue.Int64Exact(1)),
+				plancheck.ExpectKnownValue("spaceman_prompt.p", tfjsonpath.New("sha256"), knownvalue.NotNull()),
+				plancheck.ExpectKnownValue("spaceman_prompt.p", tfjsonpath.New("latest_version_id"), knownvalue.NotNull()),
+			}},
 			Check: resource.ComposeAggregateTestCheckFunc(
 				resource.TestCheckResourceAttr("spaceman_prompt.p", "name", "Name two"),
 				resource.TestCheckResourceAttr("spaceman_prompt.p", "description", "Desc two"),
@@ -1024,6 +1042,21 @@ func TestAccPromptMetadataInPlace(t *testing.T) {
 				resource.TestCheckResourceAttr("spaceman_prompt.p", "latest_version", "2"),
 				resource.TestCheckResourceAttr("spaceman_space_role.r", "description", ""),
 			),
+		},
+		// Only notes: a new version.
+		resource.TestStep{
+			Config: cfgX(`notes = "n1"`),
+			ConfigPlanChecks: resource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
+				plancheck.ExpectUnknownValue("spaceman_prompt.p", tfjsonpath.New("latest_version"))}},
+			Check: resource.TestCheckResourceAttr("spaceman_prompt.p", "latest_version", "3"),
+		},
+		// Only extends: a new version.
+		resource.TestStep{
+			Config: cfgX(`notes = "n1"
+  extends = spaceman_prompt.base.latest_version_id`),
+			ConfigPlanChecks: resource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
+				plancheck.ExpectUnknownValue("spaceman_prompt.p", tfjsonpath.New("latest_version"))}},
+			Check: resource.TestCheckResourceAttr("spaceman_prompt.p", "latest_version", "4"),
 		},
 		resource.TestStep{ResourceName: "spaceman_space_role.r", ImportState: true, ImportStateVerify: true},
 	)
