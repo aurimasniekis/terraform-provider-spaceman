@@ -14,7 +14,8 @@ import (
 	"github.com/aurimasniekis/terraform-provider-spaceman/internal/client"
 )
 
-func skillMetaHCL(sfx, name, desc, text string) string {
+// skillMetaHCL is the skill config; extra is more attributes for the resource (such as `notes`).
+func skillMetaHCL(sfx, name, desc, text, extra string) string {
 	return fmt.Sprintf(`
 resource "spaceman_skill" "k" {
   slug        = "tf-skmeta-%[1]s"
@@ -23,8 +24,23 @@ resource "spaceman_skill" "k" {
   files = {
     "SKILL.md" = "---\nname: tf-skmeta-%[1]s\ndescription: A test skill.\n---\n\n%[4]s\n"
   }
+  %[5]s
 }
-`, sfx, name, desc, text)
+`, sfx, name, desc, text, extra)
+}
+
+// skillDescription checks the skill's description through the API.
+func skillDescription(res, want string) resource.TestCheckFunc {
+	return apiCheck(res, func(ctx context.Context, c *client.Client, id string, _ *terraform.State) error {
+		s, err := c.GetSkill(ctx, id)
+		if err != nil {
+			return err
+		}
+		if s.Description != want {
+			return fmt.Errorf("the API has description %q, want %q", s.Description, want)
+		}
+		return nil
+	})
 }
 
 // skillVersions checks how many published versions the skill has through the API.
@@ -55,7 +71,7 @@ func TestAccSkillMetadataInPlace(t *testing.T) {
 	var id string
 	accSteps(t,
 		resource.TestStep{
-			Config: skillMetaHCL(sfx, "Name one", "Desc one", "Body one."),
+			Config: skillMetaHCL(sfx, "Name one", "Desc one", "Body one.", ""),
 			Check: resource.ComposeAggregateTestCheckFunc(
 				resource.TestCheckResourceAttr(k, "latest_version", "1"),
 				skillVersions(k, 1),
@@ -64,7 +80,7 @@ func TestAccSkillMetadataInPlace(t *testing.T) {
 		},
 		// Only name and description: the version fields are pinned in the plan and no version is created.
 		resource.TestStep{
-			Config: skillMetaHCL(sfx, "Name two", "Desc two", "Body one."),
+			Config: skillMetaHCL(sfx, "Name two", "Desc two", "Body one.", ""),
 			ConfigPlanChecks: resource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
 				plancheck.ExpectResourceAction(k, plancheck.ResourceActionUpdate),
 				plancheck.ExpectKnownValue(k, tfjsonpath.New("latest_version"), knownvalue.Int64Exact(1)),
@@ -84,10 +100,10 @@ func TestAccSkillMetadataInPlace(t *testing.T) {
 				},
 			),
 		},
-		resource.TestStep{Config: skillMetaHCL(sfx, "Name two", "Desc two", "Body one."), PlanOnly: true},
+		resource.TestStep{Config: skillMetaHCL(sfx, "Name two", "Desc two", "Body one.", ""), PlanOnly: true},
 		// A file change publishes the next version (and the plan marks the version fields unknown).
 		resource.TestStep{
-			Config: skillMetaHCL(sfx, "Name two", "Desc two", "Body two."),
+			Config: skillMetaHCL(sfx, "Name two", "Desc two", "Body two.", ""),
 			ConfigPlanChecks: resource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
 				plancheck.ExpectUnknownValue(k, tfjsonpath.New("latest_version"))}},
 			Check: resource.ComposeAggregateTestCheckFunc(
@@ -97,12 +113,66 @@ func TestAccSkillMetadataInPlace(t *testing.T) {
 		},
 		// Both at once: metadata changes and a version is published.
 		resource.TestStep{
-			Config: skillMetaHCL(sfx, "Name three", "", "Body three."),
+			Config: skillMetaHCL(sfx, "Name three", "", "Body three.", ""),
 			Check: resource.ComposeAggregateTestCheckFunc(
 				resource.TestCheckResourceAttr(k, "name", "Name three"),
 				resource.TestCheckResourceAttr(k, "description", ""),
 				resource.TestCheckResourceAttr(k, "latest_version", "3"),
 				skillVersions(k, 3),
+			),
+		},
+		// Only notes: the plan leaves latest_version unknown and a new version is published.
+		resource.TestStep{
+			Config: skillMetaHCL(sfx, "Name three", "", "Body three.", `notes = "n4"`),
+			ConfigPlanChecks: resource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
+				plancheck.ExpectResourceAction(k, plancheck.ResourceActionUpdate),
+				plancheck.ExpectUnknownValue(k, tfjsonpath.New("latest_version")),
+			}},
+			Check: resource.ComposeAggregateTestCheckFunc(
+				resource.TestCheckResourceAttr(k, "notes", "n4"),
+				resource.TestCheckResourceAttr(k, "latest_version", "4"),
+				skillVersions(k, 4),
+			),
+		},
+		// Only description: the version fields are pinned in the plan, the API shows the new description, and no version is created.
+		resource.TestStep{
+			Config: skillMetaHCL(sfx, "Name three", "Desc four", "Body three.", `notes = "n4"`),
+			ConfigPlanChecks: resource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
+				plancheck.ExpectResourceAction(k, plancheck.ResourceActionUpdate),
+				plancheck.ExpectKnownValue(k, tfjsonpath.New("latest_version"), knownvalue.Int64Exact(4)),
+				plancheck.ExpectKnownValue(k, tfjsonpath.New("sha256"), knownvalue.NotNull()),
+				plancheck.ExpectKnownValue(k, tfjsonpath.New("latest_version_id"), knownvalue.NotNull()),
+			}},
+			Check: resource.ComposeAggregateTestCheckFunc(
+				resource.TestCheckResourceAttr(k, "description", "Desc four"),
+				resource.TestCheckResourceAttr(k, "latest_version", "4"),
+				skillDescription(k, "Desc four"),
+				skillVersions(k, 4),
+			),
+		},
+		// Drift: the name is renamed through the API; the apply restores it and, being name-only, pins latest_version.
+		resource.TestStep{
+			PreConfig: func() {
+				ctx := context.Background()
+				cur, err := acc.client.GetSkill(ctx, id)
+				if err != nil {
+					t.Fatal(err)
+				}
+				n := "Renamed out of band"
+				if _, err := acc.client.UpdateSkill(ctx, id, cur.Version, client.UpdateSkillInput{Name: &n}); err != nil {
+					t.Fatal(err)
+				}
+			},
+			Config: skillMetaHCL(sfx, "Name four", "Desc four", "Body three.", `notes = "n4"`),
+			ConfigPlanChecks: resource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
+				plancheck.ExpectResourceAction(k, plancheck.ResourceActionUpdate),
+				plancheck.ExpectKnownValue(k, tfjsonpath.New("latest_version"), knownvalue.Int64Exact(4)),
+			}},
+			Check: resource.ComposeAggregateTestCheckFunc(
+				resource.TestCheckResourceAttr(k, "name", "Name four"),
+				resource.TestCheckResourceAttr(k, "latest_version", "4"),
+				skillDescription(k, "Desc four"),
+				skillVersions(k, 4),
 			),
 		},
 		resource.TestStep{ResourceName: k, ImportState: true, ImportStateVerify: true},
