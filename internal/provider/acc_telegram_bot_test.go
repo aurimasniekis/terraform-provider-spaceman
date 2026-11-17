@@ -234,6 +234,6 @@ func TestAccTelegramBotBadCIDR(t *testing.T) {
 func TestAccTelegramBotWebhookNeedsHTTPS(t *testing.T) {
 	accSteps(t, resource.TestStep{
 		Config:      tgBotConfig{token: "4004:AAtfsecretfour", version: 1, body: `  enabled = true`}.hcl(),
-		ExpectError: regexp.MustCompile(`webhook mode needs central's public_url to be https`),
+		ExpectError: regexp.MustCompile(`public_url .*to be https`),
 	})
 }
