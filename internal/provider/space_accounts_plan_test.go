@@ -120,3 +120,31 @@ func TestSpaceAccountsReadFillsPriorityOfLegacyState(t *testing.T) {
 		t.Fatalf("read = %v, want %v", got.Bindings, want)
 	}
 }
+
+// Removing an attribute from config must revert it to its default (Optional + Computed would otherwise keep the
+// prior state value): this is what the plan modifier adds.
+func TestSpaceAccountsRemovedAttributeRevertsToDefault(t *testing.T) {
+	cases := map[string]struct{ from, to, attr, before, after string }{
+		"default":  {`[{ account_id = "acc_1", default = true }]`, `[{ account_id = "acc_1" }]`, "binding.0.default", "true", "false"},
+		"priority": {`[{ account_id = "acc_1", priority = 20 }]`, `[{ account_id = "acc_1" }]`, "binding.0.priority", "20", "100"},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			srv := httptest.NewServer(&fakeAccountsAPI{})
+			defer srv.Close()
+			const res = "spaceman_space_accounts.x"
+			resource.UnitTest(t, resource.TestCase{
+				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+				Steps: []resource.TestStep{
+					{Config: accountsHCL(srv.URL, c.from), Check: resource.TestCheckResourceAttr(res, c.attr, c.before)},
+					{
+						Config:           accountsHCL(srv.URL, c.to),
+						ConfigPlanChecks: resource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{plancheck.ExpectResourceAction(res, plancheck.ResourceActionUpdate)}},
+						Check:            resource.TestCheckResourceAttr(res, c.attr, c.after),
+					},
+					{Config: accountsHCL(srv.URL, c.to), PlanOnly: true},
+				},
+			})
+		})
+	}
+}
