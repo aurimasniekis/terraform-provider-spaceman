@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -8,8 +9,15 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/hashicorp/terraform-plugin-framework/attr"
+	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
+	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-go/tftypes"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/plancheck"
+
+	"github.com/aurimasniekis/terraform-provider-spaceman/internal/client"
 )
 
 // fakeAccountsAPI is a SpaceMan stand-in for /spaces/{id}/accounts: PUT stores the bindings, GET returns them,
@@ -77,5 +85,38 @@ func TestSpaceAccountsDefaultSurvivesPlan(t *testing.T) {
 				},
 			})
 		})
+	}
+}
+
+// A 0.1.5 state has no priority (null). Read must fill it from the API, so the next plan is empty
+// instead of null -> 100.
+func TestSpaceAccountsReadFillsPriorityOfLegacyState(t *testing.T) {
+	ctx := context.Background()
+	srv := httptest.NewServer(&fakeAccountsAPI{items: []map[string]any{{"account_id": "acc_1", "default": true, "priority": 100}}})
+	defer srv.Close()
+	c, err := client.New(srv.URL, "spaceman_at_test", client.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := &spaceAccountsResource{base{c: c}}
+	var sr fwresource.SchemaResponse
+	r.Schema(ctx, fwresource.SchemaRequest{}, &sr)
+	legacy := types.SetValueMust(bindingType, []attr.Value{types.ObjectValueMust(bindingType.AttrTypes, map[string]attr.Value{
+		"account_id": types.StringValue("acc_1"), "default": types.BoolValue(true), "priority": types.Int64Null()})})
+	st := tfsdk.State{Schema: sr.Schema, Raw: tftypes.NewValue(sr.Schema.Type().TerraformType(ctx), nil)}
+	if d := st.Set(ctx, &spaceAccountsModel{ID: types.StringValue("spc_1"), SpaceID: types.StringValue("spc_1"), Bindings: legacy}); d.HasError() {
+		t.Fatal(d)
+	}
+	resp := fwresource.ReadResponse{State: st}
+	r.Read(ctx, fwresource.ReadRequest{State: st}, &resp)
+	if resp.Diagnostics.HasError() {
+		t.Fatal(resp.Diagnostics)
+	}
+	var got spaceAccountsModel
+	resp.State.Get(ctx, &got)
+	want := types.SetValueMust(bindingType, []attr.Value{types.ObjectValueMust(bindingType.AttrTypes, map[string]attr.Value{
+		"account_id": types.StringValue("acc_1"), "default": types.BoolValue(true), "priority": types.Int64Value(100)})})
+	if !got.Bindings.Equal(want) {
+		t.Fatalf("read = %v, want %v", got.Bindings, want)
 	}
 }
