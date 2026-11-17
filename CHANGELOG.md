@@ -5,9 +5,17 @@ All notable changes to this provider are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.1.10] - 2026-11-17
+
+Patch and feature release, released alongside SpaceMan 0.1.10. Provider 0.1.8 plans `default = false` for every
+`spaceman_space_accounts` binding whose `priority` is omitted, which would leave those spaces without a default account:
+don't apply plans made with 0.1.8, and upgrade from 0.1.5 straight to this release. SpaceMan 0.1.8 was tagged but never
+released, so the attributes 0.1.8 lists as needing SpaceMan 0.1.8 need SpaceMan 0.1.9 or later. The provider skips 0.1.9
+so that its version matches SpaceMan's.
+
 ### Added
 - `spaceman_telegram_settings.notification_defaults.threads`: a link's chat layout, `auto` (default), `on` or `off`
-  (SpaceMan ADR-0089). Needs SpaceMan 0.1.8 or later.
+  (SpaceMan ADR-0089). Needs SpaceMan 0.1.9 or later.
 
 ### Fixed
 - `spaceman_space_accounts`: a binding with `priority` omitted planned `default = true` as `false` (and showed a
@@ -15,7 +23,7 @@ All notable changes to this provider are documented here. The format is based on
   value; the defaults (`default = false`, `priority = 100`) are now applied by a plan modifier.
 
 ### Changed
-- The Telegram contract test checks against SpaceMan 0.1.8, the release that carries `threads`; the pin moves with each
+- The Telegram contract test checks against SpaceMan 0.1.8, the tag that carries `threads`; the pin moves with each
   SpaceMan release.
 
 ## [0.1.8] - 2026-11-16
@@ -265,7 +273,8 @@ First release candidate (pre-release; not production-ready, see SpaceMan's docs/
 - `spaceman_human_action_policy`: `response_inbox` (`off`, `routed` or `always`), whether a response also becomes an
   inbox item (SpaceMan SM-INBOX-001, ADR-0049). Without the attribute, the provider's writes reset the policy to `off`.
 
-[Unreleased]: https://github.com/aurimasniekis/terraform-provider-spaceman/compare/v0.1.8...HEAD
+[Unreleased]: https://github.com/aurimasniekis/terraform-provider-spaceman/compare/v0.1.10...HEAD
+[0.1.10]: https://github.com/aurimasniekis/terraform-provider-spaceman/compare/v0.1.8...v0.1.10
 [0.1.8]: https://github.com/aurimasniekis/terraform-provider-spaceman/compare/v0.1.5...v0.1.8
 [0.1.5]: https://github.com/aurimasniekis/terraform-provider-spaceman/compare/v0.1.3...v0.1.5
 [0.1.3]: https://github.com/aurimasniekis/terraform-provider-spaceman/releases/tag/v0.1.3
