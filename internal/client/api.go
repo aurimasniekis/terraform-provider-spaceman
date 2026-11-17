@@ -289,6 +289,13 @@ func (c *Client) CreatePrompt(ctx context.Context, in CreatePromptInput) (*Promp
 	return &out, c.do2(ctx, http.MethodPost, "/prompts", 0, in, &out)
 }
 
+// UpdatePrompt is PATCH /prompts/{id} (SpaceMan 0.1.11): changes name and/or description in place, creating no version.
+// version is the prompt's `version` (If-Match).
+func (c *Client) UpdatePrompt(ctx context.Context, id string, version int64, in UpdatePromptInput) (*Prompt, error) {
+	var out Prompt
+	return &out, c.patch(ctx, "/prompts/"+esc(id), version, in, &out)
+}
+
 // SavePromptDraft is PUT /prompts/{id}/draft: version 0 starts a new draft, otherwise it updates the draft at version.
 func (c *Client) SavePromptDraft(ctx context.Context, id string, version int64, in PromptDraftInput) (*PromptVersion, error) {
 	var out PromptVersion

@@ -323,3 +323,31 @@ func TestDraftHelpers(t *testing.T) {
 		t.Fatal("empty helpers")
 	}
 }
+
+func TestUpdatePrompt(t *testing.T) {
+	f := &fakeAPI{resp: []func(http.ResponseWriter){jsonResp(200, map[string]any{"id": "prm_1", "name": "New", "version": 4})}}
+	c := newTest(t, f)
+	n := "New"
+	p, err := c.UpdatePrompt(context.Background(), "prm_1", 3, UpdatePromptInput{Name: &n})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := f.reqs[0]
+	if r.method != http.MethodPatch || r.path != "/api/v1/prompts/prm_1" || r.ifMatch != `"3"` && r.ifMatch != "3" {
+		t.Fatalf("request = %+v", r)
+	}
+	if r.body != `{"name":"New"}`+"\n" && r.body != `{"name":"New"}` {
+		t.Fatalf("body = %q (a field left nil must be omitted)", r.body)
+	}
+	if p.Name != "New" || p.Version != 4 {
+		t.Fatalf("prompt = %+v", p)
+	}
+}
+
+func TestIsMissingEndpoint(t *testing.T) {
+	for status, want := range map[int]bool{404: true, 405: true, 409: false, 500: false} {
+		if got := IsMissingEndpoint(&APIError{Status: status}); got != want {
+			t.Errorf("status %d: %v", status, got)
+		}
+	}
+}

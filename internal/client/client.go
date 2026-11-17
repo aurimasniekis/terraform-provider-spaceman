@@ -142,6 +142,13 @@ func IsNotFound(err error) bool {
 	return errors.As(err, &ae) && ae.Status == http.StatusNotFound
 }
 
+// IsMissingEndpoint reports whether err is a 404 or 405: a PATCH path of an object that exists answers so on a SpaceMan
+// that lacks the operation.
+func IsMissingEndpoint(err error) bool {
+	var ae *APIError
+	return errors.As(err, &ae) && (ae.Status == http.StatusNotFound || ae.Status == http.StatusMethodNotAllowed)
+}
+
 // IsConflict reports whether err is a version or uniqueness conflict (409, 412).
 func IsConflict(err error) bool {
 	var ae *APIError

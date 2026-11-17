@@ -55,6 +55,7 @@ type spaceRoleModel struct {
 	Model        types.String `tfsdk:"model"`
 	Settings     types.Map    `tfsdk:"settings"`
 	Instructions types.String `tfsdk:"instructions"`
+	Description  types.String `tfsdk:"description"`
 	Skills       types.List   `tfsdk:"skills"`
 	Revision     types.Int64  `tfsdk:"revision"`
 }
@@ -78,8 +79,10 @@ func (r *spaceRoleResource) Schema(_ context.Context, _ resource.SchemaRequest, 
 			"model":        optString("Model overriding the profile's."),
 			"settings":     optMap("Harness settings overriding the template's."),
 			"instructions": optString("Space-specific text appended after the role's prompt."),
-			"skills":       skillsAttr("Skills added to the template's; a pin here wins."),
-			"revision":     schema.Int64Attribute{Computed: true, MarkdownDescription: "Increments on every change of the role."},
+			"description": schema.StringAttribute{Optional: true, Computed: true, Default: stringDefault(""),
+				MarkdownDescription: "What the role is for in this space; empty uses the role template's description. Changed in place (SpaceMan 0.1.11 or later)."},
+			"skills":   skillsAttr("Skills added to the template's; a pin here wins."),
+			"revision": schema.Int64Attribute{Computed: true, MarkdownDescription: "Increments on every change of the role."},
 		},
 	}
 }
@@ -95,6 +98,7 @@ func (r *spaceRoleResource) toModel(sr *client.SpaceRole, m *spaceRoleModel) {
 	m.Model = types.StringValue(sr.Model)
 	m.Settings = mapValue(sr.Settings)
 	m.Instructions = types.StringValue(sr.Instructions)
+	m.Description = types.StringValue(sr.Description)
 	m.Skills = skillRefsValue(sr.Skills, m.Skills)
 	m.Revision = types.Int64Value(sr.Revision)
 }
@@ -102,7 +106,7 @@ func (r *spaceRoleResource) toModel(sr *client.SpaceRole, m *spaceRoleModel) {
 func (r *spaceRoleResource) input(ctx context.Context, m *spaceRoleModel, d *diag.Diagnostics) client.SpaceRoleInput {
 	return client.SpaceRoleInput{TemplateID: m.TemplateID.ValueString(), ProfileID: strOrEmpty(m.ProfileID), PromptID: strOrEmpty(m.PromptID),
 		PromptPin: strOrEmpty(m.PromptPin), Model: strOrEmpty(m.Model), Settings: stringMap(ctx, m.Settings, d), Instructions: strOrEmpty(m.Instructions),
-		Skills: skillRefs(ctx, m.Skills, d)}
+		Description: strOrEmpty(m.Description), Skills: skillRefs(ctx, m.Skills, d)}
 }
 
 func (r *spaceRoleResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -189,5 +193,5 @@ func (r *spaceRoleResource) ImportState(ctx context.Context, req resource.Import
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &spaceRoleModel{ID: types.StringValue(req.ID), SpaceID: types.StringValue(p[0]), Name: types.StringValue(p[1]),
 		TemplateID: types.StringNull(), ProfileID: types.StringNull(), PromptID: types.StringNull(), PromptPin: types.StringNull(), Model: types.StringNull(),
-		Settings: types.MapNull(types.StringType), Instructions: types.StringNull(), Skills: types.ListNull(skillRefType), Revision: types.Int64Null()})...)
+		Settings: types.MapNull(types.StringType), Instructions: types.StringNull(), Description: types.StringNull(), Skills: types.ListNull(skillRefType), Revision: types.Int64Null()})...)
 }

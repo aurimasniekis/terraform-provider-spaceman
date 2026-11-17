@@ -5,6 +5,18 @@ All notable changes to this provider are documented here. The format is based on
 
 ## [Unreleased]
 
+Needs SpaceMan 0.1.11 or later for the items below (SpaceMan ADR-0095); an older SpaceMan answers with a clear error.
+
+### Changed
+- `spaceman_prompt`: `name` and `description` are changed in place (`PATCH /prompts/{id}`) instead of being refused. A
+  change of only these publishes no version and leaves `latest_version` unchanged in the plan; `body`, `extends` and
+  `notes` still publish. `slug` and `kind` stay fixed.
+- `spaceman_role_template.description`: documented that changing it creates no prompt version.
+
+### Added
+- `spaceman_space_role.description`: what the role is for in this space (default `""`, which uses the template's
+  description), updated in place.
+
 ## [0.1.10] - 2026-11-17
 
 Patch and feature release, released alongside SpaceMan 0.1.10. Provider 0.1.8 plans `default = false` for every

@@ -33,7 +33,7 @@ resource "spaceman_role_template" "worker" {
 
 ### Optional
 
-- `description` (String) Description.
+- `description` (String) Description. Changing it creates no prompt version.
 - `memory_conventions` (String) How the role keeps its memory.
 - `profile_id` (String) The harness profile.
 - `prompt_id` (String) The prompt (prompt binding).

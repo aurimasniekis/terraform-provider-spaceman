@@ -35,6 +35,7 @@ resource "spaceman_space_role" "implementor" {
 
 ### Optional
 
+- `description` (String) What the role is for in this space; empty uses the role template's description. Changed in place (SpaceMan 0.1.11 or later).
 - `instructions` (String) Space-specific text appended after the role's prompt.
 - `model` (String) Model overriding the profile's.
 - `profile_id` (String) Harness profile overriding the template's.
