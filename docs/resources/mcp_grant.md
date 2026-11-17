@@ -30,7 +30,7 @@ resource "spaceman_mcp_grant" "tracker_read" {
 
 ### Optional
 
-- `role` (String) A space role name, or `*` (default) for every role.
+- `role` (String) A space role name, or `*` (default) for every role. Changing it replaces the grant, so renaming a `spaceman_space_role` this references revokes the grant and adds one for the new name; a rename needs no live runs of the role, so none sees the gap.
 - `tools` (Set of String) Subset of the server's tools; empty grants all of them.
 
 ### Read-Only

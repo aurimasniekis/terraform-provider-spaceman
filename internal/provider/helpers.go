@@ -93,6 +93,18 @@ func getVersion(ctx context.Context, p privateReader, diags *diag.Diagnostics) i
 	return n
 }
 
+// versionUnlessRoleRefsChange is the stored server version, or 0 (read the current one first) when a role reference of
+// the object changes in this update. Renaming a space role rewrites such references in central, which bumps the
+// object's version behind the stored one; the update is then the idempotent write of what central already did.
+func versionUnlessRoleRefsChange(ctx context.Context, p privateReader, diags *diag.Diagnostics, pairs ...[2]attr.Value) int64 {
+	for _, pr := range pairs {
+		if !pr[0].Equal(pr[1]) {
+			return 0
+		}
+	}
+	return getVersion(ctx, p, diags)
+}
+
 // setVersion stores the server version as a JSON number (private state must be JSON).
 func setVersion(ctx context.Context, p privateWriter, v int64, diags *diag.Diagnostics) {
 	if p == nil || v <= 0 {

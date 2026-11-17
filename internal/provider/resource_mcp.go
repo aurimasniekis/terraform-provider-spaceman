@@ -221,7 +221,7 @@ func (r *mcpGrantResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 			"server_id": requiredReplace("The MCP server."),
 			"space_id":  requiredReplace("The space."),
 			"role": schema.StringAttribute{Optional: true, Computed: true, Default: stringdefault.StaticString("*"),
-				MarkdownDescription: "A space role name, or `*` (default) for every role.",
+				MarkdownDescription: "A space role name, or `*` (default) for every role. Changing it replaces the grant, so renaming a `spaceman_space_role` this references revokes the grant and adds one for the new name; a rename needs no live runs of the role, so none sees the gap.",
 				PlanModifiers:       []planmodifier.String{stringplanmodifier.RequiresReplace()}},
 			"tools": schema.SetAttribute{Optional: true, Computed: true, ElementType: types.StringType,
 				MarkdownDescription: "Subset of the server's tools; empty grants all of them.",

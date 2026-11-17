@@ -2,8 +2,11 @@ package provider
 
 import (
 	"context"
+	"errors"
+	"net/http"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
@@ -68,9 +71,13 @@ func (r *spaceRoleResource) Schema(_ context.Context, _ resource.SchemaRequest, 
 		MarkdownDescription: "A role configured in a space (`PUT/DELETE /spaces/{id}/roles/{name}`): a role template with space-specific overrides. " +
 			"Non-empty fields override the template's; changes apply to later launches.",
 		Attributes: map[string]schema.Attribute{
-			"id":           idAttr("`<space_id>/<name>`."),
-			"space_id":     requiredReplace("The space."),
-			"name":         requiredReplace("Role name, lowercase (e.g. `implementor-backend`)."),
+			"id": schema.StringAttribute{Computed: true, MarkdownDescription: "`<space_id>/<name>`; changes when the role is renamed.",
+				PlanModifiers: []planmodifier.String{useStateUnlessNameChanges{}}},
+			"space_id": requiredReplace("The space."),
+			"name": schema.StringAttribute{Required: true, MarkdownDescription: "Role name, lowercase (e.g. `implementor-backend`). Changing it renames the role in place " +
+				"(`POST /spaces/{id}/roles/{name}/rename`, SpaceMan 0.1.11 or later): live references to the role in the space follow it, and " +
+				"a role with live work is refused. Never a destroy and create. A `spaceman_mcp_grant` that references the role is replaced, " +
+				"since grants cannot be edited."},
 			"template_id":  schema.StringAttribute{Required: true, MarkdownDescription: "The role template (`rtp_…`)."},
 			"profile_id":   optString("Harness profile overriding the template's."),
 			"prompt_id":    optString("Prompt overriding the template's."),
@@ -142,6 +149,15 @@ func (r *spaceRoleResource) Read(ctx context.Context, req resource.ReadRequest, 
 	}
 	sr, err := r.c.GetSpaceRole(ctx, m.SpaceID.ValueString(), m.Name.ValueString())
 	if client.IsNotFound(err) {
+		// Renamed outside Terraform: follow the rename so the role shows as an in-place `name` change back to the
+		// configured value, not as a resource to create. An older SpaceMan has no rename history: the role is gone.
+		if renames, lerr := r.c.ListSpaceRoleRenames(ctx, m.SpaceID.ValueString()); lerr == nil {
+			if now := client.FollowSpaceRoleRename(renames, m.Name.ValueString()); now != m.Name.ValueString() {
+				sr, err = r.c.GetSpaceRole(ctx, m.SpaceID.ValueString(), now)
+			}
+		}
+	}
+	if client.IsNotFound(err) {
 		resp.State.RemoveResource(ctx)
 		return
 	} else if err != nil {
@@ -158,11 +174,26 @@ func (r *spaceRoleResource) Update(ctx context.Context, req resource.UpdateReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	var old spaceRoleModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &old)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 	in := r.input(ctx, &m, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	sr, err := r.c.SaveSpaceRole(ctx, m.SpaceID.ValueString(), m.Name.ValueString(), in)
+	space := m.SpaceID.ValueString()
+	if old.Name.ValueString() != m.Name.ValueString() {
+		if _, err := r.c.RenameSpaceRole(ctx, space, old.Name.ValueString(), m.Name.ValueString()); err != nil {
+			r.renameError(ctx, &resp.Diagnostics, space, old.Name.ValueString(), m.Name.ValueString(), err)
+			return
+		}
+		// The role now carries the new name even if the save below fails: record it so the next plan sees the truth.
+		old.Name, old.ID = m.Name, types.StringValue(space+"/"+m.Name.ValueString())
+		resp.Diagnostics.Append(resp.State.Set(ctx, &old)...)
+	}
+	sr, err := r.c.SaveSpaceRole(ctx, space, m.Name.ValueString(), in)
 	if err != nil {
 		addAPIError(&resp.Diagnostics, "Could not update the space role", err)
 		return
@@ -190,4 +221,43 @@ func (r *spaceRoleResource) ImportState(ctx context.Context, req resource.Import
 	resp.Diagnostics.Append(resp.State.Set(ctx, &spaceRoleModel{ID: types.StringValue(req.ID), SpaceID: types.StringValue(p[0]), Name: types.StringValue(p[1]),
 		TemplateID: types.StringNull(), ProfileID: types.StringNull(), PromptID: types.StringNull(), PromptPin: types.StringNull(), Model: types.StringNull(),
 		Settings: types.MapNull(types.StringType), Instructions: types.StringNull(), Skills: types.ListNull(skillRefType), Revision: types.Int64Null()})...)
+}
+
+// renameError reports a failed rename. A 404/405 on the action path of a role that exists means a SpaceMan without the
+// endpoint; a 409 carries the blockers (role_busy), a taken name or a node on an older protocol in its detail.
+func (r *spaceRoleResource) renameError(ctx context.Context, d *diag.Diagnostics, space, from, to string, err error) {
+	var ae *client.APIError
+	if errors.As(err, &ae) && (ae.Status == http.StatusMethodNotAllowed || ae.Status == http.StatusNotFound) {
+		if _, gerr := r.c.GetSpaceRole(ctx, space, from); gerr == nil {
+			d.AddError("Renaming a role needs SpaceMan 0.1.11 or later",
+				"This SpaceMan has no endpoint to rename role "+from+" (\""+ae.Operation+"\" returned "+http.StatusText(ae.Status)+"). Upgrade "+
+					"SpaceMan, or change `name` back: the provider never deletes and recreates a role to rename it.")
+			return
+		}
+	}
+	addAPIError(d, "Could not rename the space role "+from+" to "+to, err)
+}
+
+// useStateUnlessNameChanges keeps the state's id, except when `name` changes: the id is `<space_id>/<name>`, so it is
+// unknown until the rename is applied.
+type useStateUnlessNameChanges struct{}
+
+func (useStateUnlessNameChanges) Description(context.Context) string {
+	return "Keeps the id unless the role's name changes."
+}
+
+func (m useStateUnlessNameChanges) MarkdownDescription(ctx context.Context) string {
+	return m.Description(ctx)
+}
+
+func (useStateUnlessNameChanges) PlanModifyString(ctx context.Context, req planmodifier.StringRequest, resp *planmodifier.StringResponse) {
+	if req.State.Raw.IsNull() || !req.PlanValue.IsUnknown() {
+		return
+	}
+	var planName, stateName types.String
+	resp.Diagnostics.Append(req.Plan.GetAttribute(ctx, path.Root("name"), &planName)...)
+	resp.Diagnostics.Append(req.State.GetAttribute(ctx, path.Root("name"), &stateName)...)
+	if resp.Diagnostics.HasError() || (!planName.IsUnknown() && planName.Equal(stateName)) {
+		resp.PlanValue = req.StateValue
+	}
 }

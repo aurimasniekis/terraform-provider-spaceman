@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"strconv"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -178,7 +179,7 @@ func (r *humanPermissionResource) Update(ctx context.Context, req resource.Updat
 		return
 	}
 	spaceID, typ := prior.SpaceID.ValueString(), prior.ActionType.ValueString()
-	v := getVersion(ctx, req.Private, &resp.Diagnostics)
+	v := versionUnlessRoleRefsChange(ctx, req.Private, &resp.Diagnostics, [2]attr.Value{m.AgentRoles, prior.AgentRoles})
 	if v == 0 {
 		cur, err := r.c.GetHumanTypePermission(ctx, spaceID, typ)
 		if err != nil {

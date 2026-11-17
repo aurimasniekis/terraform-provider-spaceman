@@ -259,6 +259,26 @@ type SpaceRoleInput struct {
 	Skills       []SkillRef        `json:"skills,omitempty"`
 }
 
+// RenameSpaceRoleInput is POST /spaces/{id}/roles/{name}/rename.
+type RenameSpaceRoleInput struct {
+	NewName string `json:"new_name"`
+}
+
+// SpaceRoleRename is one rename of a space role; NodeState is pending, failed, done or not_needed.
+type SpaceRoleRename struct {
+	ID        string `json:"id"`
+	SpaceID   string `json:"space_id"`
+	From      string `json:"from"`
+	To        string `json:"to"`
+	NodeState string `json:"node_state"`
+}
+
+// RenamedSpaceRole is the renamed role with the rename that renamed it.
+type RenamedSpaceRole struct {
+	SpaceRole
+	Rename SpaceRoleRename `json:"rename"`
+}
+
 // Prompt is a catalog prompt with its versions (draft first, then newest published first).
 type Prompt struct {
 	ID          string           `json:"id"`

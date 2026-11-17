@@ -270,6 +270,30 @@ func (c *Client) SaveSpaceRole(ctx context.Context, spaceID, name string, in Spa
 	return &out, c.put(ctx, "/spaces/"+esc(spaceID)+"/roles/"+esc(name), 0, in, &out)
 }
 
+// RenameSpaceRole is POST /spaces/{id}/roles/{name}/rename (SpaceMan 0.1.11 or later): the role and every live reference
+// to it in the space move to newName in one transaction. Without ifMatch the role's revision is not checked.
+func (c *Client) RenameSpaceRole(ctx context.Context, spaceID, name, newName string) (*RenamedSpaceRole, error) {
+	var out RenamedSpaceRole
+	return &out, c.post(ctx, "/spaces/"+esc(spaceID)+"/roles/"+esc(name)+"/rename", 0, RenameSpaceRoleInput{NewName: newName}, &out)
+}
+
+// ListSpaceRoleRenames is GET /spaces/{id}/role-renames (SpaceMan 0.1.11 or later), newest first.
+func (c *Client) ListSpaceRoleRenames(ctx context.Context, spaceID string) ([]*SpaceRoleRename, error) {
+	var out items[*SpaceRoleRename]
+	return out.Items, c.get(ctx, "/spaces/"+esc(spaceID)+"/role-renames", &out)
+}
+
+// FollowSpaceRoleRename returns the name a role now carries after renames from name (oldest first), or name itself
+// when it was never renamed away.
+func FollowSpaceRoleRename(renames []*SpaceRoleRename, name string) string {
+	for i := len(renames) - 1; i >= 0; i-- {
+		if renames[i].From == name {
+			name = renames[i].To
+		}
+	}
+	return name
+}
+
 // DeleteSpaceRole is DELETE /spaces/{id}/roles/{name}.
 func (c *Client) DeleteSpaceRole(ctx context.Context, spaceID, name string) error {
 	return c.del(ctx, "/spaces/"+esc(spaceID)+"/roles/"+esc(name))

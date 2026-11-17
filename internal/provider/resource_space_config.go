@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -255,7 +256,8 @@ func (r *knowledgeBaseResource) Update(ctx context.Context, req resource.UpdateR
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	k, err := r.update(ctx, prior.SpaceID.ValueString(), prior.ID.ValueString(), getVersion(ctx, req.Private, &resp.Diagnostics), in)
+	k, err := r.update(ctx, prior.SpaceID.ValueString(), prior.ID.ValueString(), versionUnlessRoleRefsChange(ctx, req.Private, &resp.Diagnostics, [2]attr.Value{m.SpaceRole, prior.SpaceRole},
+		[2]attr.Value{m.AllowedRoles, prior.AllowedRoles}), in)
 	if err != nil {
 		addAPIError(&resp.Diagnostics, "Could not update the knowledge base", err)
 		return
@@ -443,7 +445,8 @@ func (r *dreamResource) Update(ctx context.Context, req resource.UpdateRequest, 
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	v := getVersion(ctx, req.Private, &resp.Diagnostics)
+	v := versionUnlessRoleRefsChange(ctx, req.Private, &resp.Diagnostics, [2]attr.Value{m.SpaceRole, prior.SpaceRole},
+		[2]attr.Value{m.MemoryRoles, prior.MemoryRoles}, [2]attr.Value{m.TranscriptRoles, prior.TranscriptRoles})
 	if v == 0 {
 		cur, err := r.c.GetDream(ctx, prior.SpaceID.ValueString(), prior.ID.ValueString())
 		if err != nil {

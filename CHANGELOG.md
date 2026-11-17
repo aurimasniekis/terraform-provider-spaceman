@@ -5,6 +5,17 @@ All notable changes to this provider are documented here. The format is based on
 
 ## [Unreleased]
 
+### Changed
+- `spaceman_space_role.name`: changing it renames the role in place (`POST /spaces/{id}/roles/{name}/rename`) instead of
+  destroying and creating it; `id` follows the new name. Live references in the space follow the rename in central:
+  schedules, knowledge bases, dreams, human permissions and the human policy successor update in place, and a
+  `spaceman_mcp_grant` that references the role is replaced (grants cannot be edited). A role with live work is refused
+  with the blockers listed. A rename made outside Terraform shows as an in-place `name` change back to the configured
+  value. Needs SpaceMan 0.1.11 or later: an older SpaceMan fails the rename with a clear error and never falls back to
+  delete and create.
+- The schedule, knowledge base, dream, human permission and human policy updates read the object's current version when
+  a role reference changes, since a role rename bumps their version in central.
+
 ## [0.1.10] - 2026-11-17
 
 Patch and feature release, released alongside SpaceMan 0.1.10. Provider 0.1.8 plans `default = false` for every

@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"strings"
 	"time"
 
@@ -221,7 +222,7 @@ func (r *scheduleResource) Update(ctx context.Context, req resource.UpdateReques
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	v := getVersion(ctx, req.Private, &resp.Diagnostics)
+	v := versionUnlessRoleRefsChange(ctx, req.Private, &resp.Diagnostics, [2]attr.Value{m.AssigneeRole, prior.AssigneeRole})
 	if v == 0 {
 		cur, err := r.c.GetSchedule(ctx, prior.SpaceID.ValueString(), prior.ID.ValueString())
 		if err != nil {
