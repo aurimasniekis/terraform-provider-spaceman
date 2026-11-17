@@ -226,13 +226,14 @@ func (r *skillResource) Metadata(_ context.Context, req resource.MetadataRequest
 func (r *skillResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "A catalog skill (`/skills`). `files` and `notes` describe the latest published version; changing them publishes the " +
-			"next immutable version. Skills give guidance, never permission. SpaceMan has no API to rename or delete a skill: identifying fields " +
-			"are fixed and destroying the resource only removes it from Terraform's state.",
+			"next immutable version. `name` and `description` change in place (`PATCH /skills/{id}`, SpaceMan 0.1.11 or later) and publish nothing. " +
+			"Skills give guidance, never permission. SpaceMan has no API to delete a skill: `slug` is fixed and destroying the resource " +
+			"only removes it from Terraform's state.",
 		Attributes: map[string]schema.Attribute{
 			"id":          idAttr("The skill ID."),
 			"slug":        fixedString("Unique identifier; `SKILL.md`'s frontmatter `name` must equal it. Fixed after creation.", "A skill's slug"),
-			"name":        fixedString("Display name. Fixed after creation.", "A skill's name"),
-			"description": fixedOptString("Description. Fixed after creation.", "A skill's description"),
+			"name":        schema.StringAttribute{Required: true, MarkdownDescription: "Display name. Changed in place (`PATCH /skills/{id}`, SpaceMan 0.1.11 or later); creates no version."},
+			"description": defaultEmpty("Description. Changed in place (SpaceMan 0.1.11 or later); creates no version."),
 			"files": schema.MapAttribute{Required: true, ElementType: types.StringType,
 				MarkdownDescription: "Relative path → text content. `SKILL.md` is required and starts with `---` frontmatter naming the skill and describing it."},
 			"notes":             defaultEmpty("Notes recorded with the published version."),
@@ -241,6 +242,25 @@ func (r *skillResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 			"sha256":            schema.StringAttribute{Computed: true, MarkdownDescription: "SHA-256 over the latest version's files."},
 		},
 	}
+}
+
+// ModifyPlan keeps the computed version attributes when only `name` or `description` changed: such a change publishes
+// nothing, so `latest_version`, `latest_version_id` and `sha256` stay as they are.
+func (r *skillResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	if req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
+		return
+	}
+	var plan, state skillModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if plan.Files.IsUnknown() || plan.Notes.IsUnknown() || !plan.Files.Equal(state.Files) || !plan.Notes.Equal(state.Notes) {
+		return
+	}
+	plan.LatestVersion, plan.LatestVersionID, plan.SHA256 = state.LatestVersion, state.LatestVersionID, state.SHA256
+	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
 }
 
 func (r *skillResource) toModel(s *client.Skill, m *skillModel) {
@@ -345,14 +365,51 @@ func (r *skillResource) Read(ctx context.Context, req resource.ReadRequest, resp
 }
 
 func (r *skillResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var m skillModel
+	var m, old skillModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &m)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &old)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	s := r.publish(ctx, m.ID.ValueString(), &m, &resp.Diagnostics)
-	if s == nil {
-		return
+	id := m.ID.ValueString()
+	if !m.Name.Equal(old.Name) || !m.Description.Equal(old.Description) {
+		cur, err := r.c.GetSkill(ctx, id)
+		if err != nil {
+			addAPIError(&resp.Diagnostics, "Could not read the skill", err)
+			return
+		}
+		in := client.UpdateSkillInput{}
+		if cur.Name != m.Name.ValueString() {
+			n := m.Name.ValueString()
+			in.Name = &n
+		}
+		if cur.Description != strOrEmpty(m.Description) {
+			d := strOrEmpty(m.Description)
+			in.Description = &d
+		}
+		if in.Name != nil || in.Description != nil {
+			if _, err := r.c.UpdateSkill(ctx, id, cur.Version, in); err != nil {
+				if client.IsMissingEndpoint(err) {
+					resp.Diagnostics.AddError("Changing a skill's name or description needs SpaceMan 0.1.11 or later",
+						"This SpaceMan has no endpoint to change a skill in place ("+err.Error()+"). Upgrade SpaceMan, or restore `name` and `description`.")
+					return
+				}
+				addAPIError(&resp.Diagnostics, "Could not update the skill's name or description", err)
+				return
+			}
+		}
+	}
+	var s *client.Skill
+	if !m.Files.Equal(old.Files) || !m.Notes.Equal(old.Notes) {
+		if s = r.publish(ctx, id, &m, &resp.Diagnostics); s == nil {
+			return
+		}
+	} else {
+		var err error
+		if s, err = r.c.GetSkill(ctx, id); err != nil {
+			addAPIError(&resp.Diagnostics, "Could not read the skill", err)
+			return
+		}
 	}
 	r.toModel(s, &m)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &m)...)

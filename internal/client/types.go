@@ -329,6 +329,7 @@ type Skill struct {
 	Source      string          `json:"source"`
 	Latest      int64           `json:"latest"`
 	Versions    []*SkillVersion `json:"versions"`
+	Version     int64           `json:"version"`
 }
 
 // SkillVersion is a draft or an immutable published set of files.
@@ -348,6 +349,12 @@ type CreateSkillInput struct {
 	Name        string            `json:"name"`
 	Description string            `json:"description,omitempty"`
 	Files       map[string]string `json:"files"`
+}
+
+// UpdateSkillInput is PATCH /skills/{id}: a nil field keeps its value.
+type UpdateSkillInput struct {
+	Name        *string `json:"name,omitempty"`
+	Description *string `json:"description,omitempty"`
 }
 
 // SkillDraftInput is PUT /skills/{id}/draft.

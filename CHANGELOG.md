@@ -5,6 +5,13 @@ All notable changes to this provider are documented here. The format is based on
 
 ## [Unreleased]
 
+Needs SpaceMan 0.1.11 or later for the item below (SpaceMan ADR-0095); an older SpaceMan answers with a clear error.
+
+### Changed
+- `spaceman_skill`: `name` and `description` are changed in place (`PATCH /skills/{id}`) instead of being refused. A
+  change of only these publishes no version and leaves `latest_version`, `latest_version_id` and `sha256` unchanged in
+  the plan; `files` and `notes` still publish. `slug` stays fixed.
+
 ## [0.1.10] - 2026-11-17
 
 Patch and feature release, released alongside SpaceMan 0.1.10. Provider 0.1.8 plans `default = false` for every
