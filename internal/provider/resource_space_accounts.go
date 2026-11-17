@@ -9,8 +9,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
@@ -33,6 +32,42 @@ func poolPriority(p int64) int64 {
 		return defaultPoolPriority
 	}
 	return p
+}
+
+// bindingDefaults fills the omitted default (false) and priority (100) of every configured binding. The attributes
+// cannot use schema Defaults: inside a set the framework rebuilds an element per default and drops its sibling's
+// configured value, so `default = true` planned as false once `priority` was omitted.
+type bindingDefaults struct{}
+
+func (bindingDefaults) Description(context.Context) string {
+	return "Omitted binding default is false and omitted priority is 100."
+}
+func (d bindingDefaults) MarkdownDescription(ctx context.Context) string { return d.Description(ctx) }
+
+func (bindingDefaults) PlanModifySet(ctx context.Context, req planmodifier.SetRequest, resp *planmodifier.SetResponse) {
+	if req.ConfigValue.IsNull() || req.ConfigValue.IsUnknown() {
+		return
+	}
+	var elems []types.Object
+	resp.Diagnostics.Append(req.ConfigValue.ElementsAs(ctx, &elems, false)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	out := make([]attr.Value, 0, len(elems))
+	for _, e := range elems {
+		if e.IsNull() || e.IsUnknown() {
+			return
+		}
+		attrs := e.Attributes()
+		if v, ok := attrs["default"].(types.Bool); ok && v.IsNull() {
+			attrs["default"] = types.BoolValue(false)
+		}
+		if v, ok := attrs["priority"].(types.Int64); ok && v.IsNull() {
+			attrs["priority"] = types.Int64Value(defaultPoolPriority)
+		}
+		out = append(out, types.ObjectValueMust(bindingType.AttrTypes, attrs))
+	}
+	resp.PlanValue = types.SetValueMust(bindingType, out)
 }
 
 type bindingModel struct {
@@ -58,12 +93,12 @@ func (r *spaceAccountsResource) Schema(_ context.Context, _ resource.SchemaReque
 		Attributes: map[string]schema.Attribute{
 			"id":       idAttr("The space ID."),
 			"space_id": requiredReplace("The space."),
-			"binding": schema.SetNestedAttribute{Required: true, MarkdownDescription: "Bound accounts.",
+			"binding": schema.SetNestedAttribute{Required: true, PlanModifiers: []planmodifier.Set{bindingDefaults{}}, MarkdownDescription: "Bound accounts.",
 				NestedObject: schema.NestedAttributeObject{Attributes: map[string]schema.Attribute{
 					"account_id": schema.StringAttribute{Required: true, MarkdownDescription: "The account (`acc_…`)."},
-					"default": schema.BoolAttribute{Optional: true, Computed: true, Default: booldefault.StaticBool(false),
+					"default": schema.BoolAttribute{Optional: true, Computed: true,
 						MarkdownDescription: "The account the space's runs of its harness use unless a launch names another."},
-					"priority": schema.Int64Attribute{Optional: true, Computed: true, Default: int64default.StaticInt64(defaultPoolPriority),
+					"priority": schema.Int64Attribute{Optional: true, Computed: true,
 						Validators:          []validator.Int64{int64validator.Between(1, 1000)},
 						MarkdownDescription: "Pool order for usage-limit failover (SpaceMan ADR-0090): when a run's account reaches its limit, the run moves to the pool's next eligible account, lower first (1-1000; default 100)."},
 				}}},

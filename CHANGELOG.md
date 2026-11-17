@@ -9,6 +9,11 @@ All notable changes to this provider are documented here. The format is based on
 - `spaceman_telegram_settings.notification_defaults.threads`: a link's chat layout, `auto` (default), `on` or `off`
   (SpaceMan ADR-0089). Needs SpaceMan 0.1.8 or later.
 
+### Fixed
+- `spaceman_space_accounts`: a binding with `priority` omitted planned `default = true` as `false` (and showed a
+  perpetual diff). The framework's schema `Default`s inside the set-nested `binding` dropped the sibling's configured
+  value; the defaults (`default = false`, `priority = 100`) are now applied by a plan modifier.
+
 ### Changed
 - The Telegram contract test checks against SpaceMan 0.1.8, the release that carries `threads`; the pin moves with each
   SpaceMan release.
