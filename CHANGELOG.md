@@ -5,6 +5,22 @@ All notable changes to this provider are documented here. The format is based on
 
 ## [Unreleased]
 
+### Changed
+- `spaceman_space_role.name`: changing it renames the role in place (`POST /spaces/{id}/roles/{name}/rename`) instead of
+  destroying and creating it; `id` follows the new name. Live references in the space follow the rename in central:
+  schedules, knowledge bases, dreams, human permissions, the human policy successor, MCP grants and role pools update
+  in place and keep their ids; nothing that references the role is revoked or removed before the rename, so a rename
+  refused because the role has live work leaves them as they were. A rename refused with a conflict shows the reason
+  and what to do. A rename made outside Terraform shows as an in-place `name` change back to the configured value, but
+  only when it happened after the role was last read: a name reused by a new role is not followed to an old rename, and when the name was renamed away more than once since, the earliest of those renames is followed. Needs SpaceMan 0.1.11 or later: an older SpaceMan fails the rename with a clear error and never falls back to
+  delete and create.
+- `spaceman_mcp_grant.role` and `spaceman_space_role_pool.role` no longer force a replacement. A grant whose role was
+  rewritten by a rename is left alone; a grant pointed at another role is added for the new role and then the old one revoked, so the role is never without a grant. A pool is written under
+  the new role name and the old name's pool is removed if it is still there. `id` is known after apply when `role` changes. Swapping the roles of two pool resources in one apply can remove the other's pool: do it in two applies. If the old grant can't be revoked after the new one was added, the new grant is still saved in state and the error names the old grant to revoke; a grant for the role that already exists is adopted.
+- `spaceman_space_role.name` is validated like the pool's `role` (lower case, digits and `-`).
+- The schedule, knowledge base, dream, human permission and human policy updates read the object's current version when
+  a role reference changes, since a role rename bumps their version in central.
+
 ## [0.1.10] - 2026-11-17
 
 Patch and feature release, released alongside SpaceMan 0.1.10. Provider 0.1.8 plans `default = false` for every

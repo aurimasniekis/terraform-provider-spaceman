@@ -14,6 +14,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
@@ -50,7 +51,8 @@ func (r *spaceRolePoolResource) Schema(_ context.Context, _ resource.SchemaReque
 			"first (`spaceman_space_accounts`): add `depends_on` for the binding resource. The resource owns the role's whole pool, so entries added in the UI show as drift. Destroying it removes " +
 			"the role's pool, and the role uses the space's pool again. Needs a SpaceMan release with account pools (0.1.8 or later).",
 		Attributes: map[string]schema.Attribute{
-			"id":       idAttr("`<space_id>/<role>`."),
+			"id": schema.StringAttribute{Computed: true, MarkdownDescription: "`<space_id>/<role>`; changes when `role` changes.",
+				PlanModifiers: []planmodifier.String{useStateUnlessChanges{attr: "role"}}},
 			"space_id": requiredReplace("The space."),
 			"role":     roleAttr(),
 			"account": schema.SetNestedAttribute{Required: true, Validators: []validator.Set{setvalidator.SizeAtLeast(1), setvalidator.SizeAtMost(50)},
@@ -68,9 +70,11 @@ func (r *spaceRolePoolResource) Schema(_ context.Context, _ resource.SchemaReque
 var roleNameRE = regexp.MustCompile(`^[a-z][a-z0-9-]{0,47}$`)
 
 func roleAttr() schema.StringAttribute {
-	a := requiredReplace("The role name (the space role's `name`): lower-case letters, digits and `-`, starting with a letter, at most 48 characters.")
-	a.Validators = append(a.Validators, stringvalidator.RegexMatches(roleNameRE, "must match ^[a-z][a-z0-9-]{0,47}$"))
-	return a
+	return schema.StringAttribute{Required: true,
+		MarkdownDescription: "The role name (the space role's `name`): lower-case letters, digits and `-`, starting with a letter, at most 48 characters. " +
+			"Changing it updates the pool in place: the pool is written under the new name and the old name's pool is removed if it is still there. " +
+			"Renaming the `spaceman_space_role` this references moves the pool with it. Do not swap the roles of two pool resources in one apply: removing the old name's pool can remove the pool the other resource just wrote, so swap them in two applies.",
+		Validators: []validator.String{stringvalidator.RegexMatches(roleNameRE, "must match ^[a-z][a-z0-9-]{0,47}$")}}
 }
 
 func poolEntries(ctx context.Context, v types.Set, d *diag.Diagnostics) []client.PoolEntry {
@@ -192,10 +196,27 @@ func (r *spaceRolePoolResource) Read(ctx context.Context, req resource.ReadReque
 }
 
 func (r *spaceRolePoolResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var m spaceRolePoolModel
+	var m, old spaceRolePoolModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &m)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &old)...)
 	if resp.Diagnostics.HasError() || !r.apply(ctx, &m, &resp.Diagnostics) {
 		return
+	}
+	// `role` changed. Renaming the space role moved the pool in central already, so the old name has none and the write
+	// above only confirmed the planned accounts; a real retarget leaves the old name's pool behind: remove it. The new
+	// pool is written first, so the role is never without one.
+	if from, to := old.Role.ValueString(), m.Role.ValueString(); from != "" && from != to {
+		pools, _, err := r.c.RolePools(ctx, m.SpaceID.ValueString())
+		if err != nil {
+			addAPIError(&resp.Diagnostics, "Could not read the space's account pools", err)
+			return
+		}
+		if _, ok := rolePoolOf(pools, from); ok {
+			if _, err := r.put(ctx, m.SpaceID.ValueString(), from, nil); err != nil && !client.IsNotFound(err) {
+				addAPIError(&resp.Diagnostics, "Could not remove the account pool of role "+from, err)
+				return
+			}
+		}
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &m)...)
 }

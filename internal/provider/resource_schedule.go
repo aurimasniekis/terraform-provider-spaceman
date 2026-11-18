@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -221,7 +222,7 @@ func (r *scheduleResource) Update(ctx context.Context, req resource.UpdateReques
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	v := getVersion(ctx, req.Private, &resp.Diagnostics)
+	v := versionUnlessRoleRefsChange(ctx, req.Private, &resp.Diagnostics, [2]attr.Value{m.AssigneeRole, prior.AssigneeRole})
 	if v == 0 {
 		cur, err := r.c.GetSchedule(ctx, prior.SpaceID.ValueString(), prior.ID.ValueString())
 		if err != nil {

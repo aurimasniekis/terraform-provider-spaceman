@@ -323,3 +323,36 @@ func TestDraftHelpers(t *testing.T) {
 		t.Fatal("empty helpers")
 	}
 }
+
+func TestFollowSpaceRoleRename(t *testing.T) {
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	// r builds a rename made n hours after base.
+	r := func(from, to string, n int) *SpaceRoleRename {
+		return &SpaceRoleRename{From: from, To: to, RenamedAt: base.Add(time.Duration(n) * time.Hour)}
+	}
+	seen := base // the role was last seen at base
+	for name, c := range map[string]struct {
+		renames []*SpaceRoleRename // newest first
+		from    string
+		since   time.Time
+		want    string
+	}{
+		"none":   {nil, "a", seen, "a"},
+		"one":    {[]*SpaceRoleRename{r("a", "b", 1)}, "a", seen, "b"},
+		"chain":  {[]*SpaceRoleRename{r("b", "c", 2), r("a", "b", 1)}, "a", seen, "c"},
+		"back":   {[]*SpaceRoleRename{r("b", "a", 2), r("a", "b", 1)}, "a", seen, "a"},
+		"reused": {[]*SpaceRoleRename{r("a", "c", 2), r("a", "b", 1)}, "a", seen, "b"},
+		// a->y, a new a is created, then a->w: the role Terraform saw is the one now called y.
+		"reused after baseline":   {[]*SpaceRoleRename{r("a", "w", 3), r("a", "y", 1)}, "a", seen, "y"},
+		"reused, earliest chains": {[]*SpaceRoleRename{r("y", "z", 4), r("a", "w", 3), r("a", "y", 1)}, "a", seen, "z"},
+		"unrelated":               {[]*SpaceRoleRename{r("x", "y", 1)}, "a", seen, "a"},
+		// A rename from before the role was last seen belongs to an earlier holder of the name.
+		"old rename":    {[]*SpaceRoleRename{r("a", "b", -5)}, "a", seen, "a"},
+		"same instant":  {[]*SpaceRoleRename{r("a", "b", 0)}, "a", seen, "a"},
+		"nothing known": {[]*SpaceRoleRename{r("a", "b", 1)}, "a", time.Time{}, "a"},
+	} {
+		if got := FollowSpaceRoleRename(c.renames, c.from, c.since); got != c.want {
+			t.Errorf("%s: got %s, want %s", name, got, c.want)
+		}
+	}
+}
