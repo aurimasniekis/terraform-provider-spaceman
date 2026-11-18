@@ -7,7 +7,7 @@ description: |-
 
 # spaceman_skill (Resource)
 
-A catalog skill (`/skills`). `files` and `notes` describe the latest published version; changing them publishes the next immutable version. Skills give guidance, never permission. SpaceMan has no API to rename or delete a skill: identifying fields are fixed and destroying the resource only removes it from Terraform's state.
+A catalog skill (`/skills`). `files` and `notes` describe the latest published version; changing them publishes the next immutable version. `name` and `description` change in place (`PATCH /skills/{id}`, SpaceMan 0.1.11 or later) and publish nothing. Skills give guidance, never permission. SpaceMan has no API to delete a skill: `slug` is fixed and destroying the resource only removes it from Terraform's state.
 
 ## Example Usage
 
@@ -34,12 +34,12 @@ resource "spaceman_skill" "release_notes" {
 ### Required
 
 - `files` (Map of String) Relative path → text content. `SKILL.md` is required and starts with `---` frontmatter naming the skill and describing it.
-- `name` (String) Display name. Fixed after creation.
+- `name` (String) Display name. Changed in place (`PATCH /skills/{id}`, SpaceMan 0.1.11 or later); creates no version.
 - `slug` (String) Unique identifier; `SKILL.md`'s frontmatter `name` must equal it. Fixed after creation.
 
 ### Optional
 
-- `description` (String) Description. Fixed after creation.
+- `description` (String) Description. Changed in place (SpaceMan 0.1.11 or later); creates no version.
 - `notes` (String) Notes recorded with the published version.
 
 ### Read-Only

@@ -364,6 +364,13 @@ func (c *Client) CreateSkill(ctx context.Context, in CreateSkillInput) (*Skill, 
 	return &out, c.do2(ctx, http.MethodPost, "/skills", 0, in, &out)
 }
 
+// UpdateSkill is PATCH /skills/{id} (SpaceMan 0.1.11): changes name and/or description in place, creating no version.
+// version is the skill's `version` (If-Match).
+func (c *Client) UpdateSkill(ctx context.Context, id string, version int64, in UpdateSkillInput) (*Skill, error) {
+	var out Skill
+	return &out, c.patch(ctx, "/skills/"+esc(id), version, in, &out)
+}
+
 // SaveSkillDraft is PUT /skills/{id}/draft.
 func (c *Client) SaveSkillDraft(ctx context.Context, id string, version int64, in SkillDraftInput) (*Skill, error) {
 	var out Skill

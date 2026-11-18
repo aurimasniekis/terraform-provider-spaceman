@@ -5,7 +5,7 @@ All notable changes to this provider are documented here. The format is based on
 
 ## [Unreleased]
 
-Needs SpaceMan 0.1.11 or later for the items below (SpaceMan ADR-0095); an older SpaceMan answers the prompt PATCH with a clear error, and `spaceman_space_role.description` against one earlier than 0.1.11 fails with its 422 plus a hint.
+Needs SpaceMan 0.1.11 or later for the items below (SpaceMan ADR-0095); an older SpaceMan answers the prompt and skill PATCH with a clear error, and `spaceman_space_role.description` against one earlier than 0.1.11 fails with its 422 plus a hint.
 
 ### Changed
 - `spaceman_space_role.name`: changing it renames the role in place (`POST /spaces/{id}/roles/{name}/rename`) instead of
@@ -26,6 +26,9 @@ Needs SpaceMan 0.1.11 or later for the items below (SpaceMan ADR-0095); an older
   change of only these publishes no version and leaves `latest_version` unchanged in the plan; `body`, `extends` and
   `notes` still publish. `slug` and `kind` stay fixed.
 - `spaceman_role_template.description`: documented that changing it creates no prompt version.
+- `spaceman_skill`: `name` and `description` are changed in place (`PATCH /skills/{id}`) instead of being refused. A
+  change of only these publishes no version and leaves `latest_version`, `latest_version_id` and `sha256` unchanged in
+  the plan; `files` and `notes` still publish. `slug` stays fixed.
 
 ### Added
 - `spaceman_space_role.description`: what the role is for in this space (default `""`, which uses the template's
