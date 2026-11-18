@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"net/http"
+	"time"
 )
 
 type items[T any] struct {
@@ -270,6 +271,47 @@ func (c *Client) SaveSpaceRole(ctx context.Context, spaceID, name string, in Spa
 	return &out, c.put(ctx, "/spaces/"+esc(spaceID)+"/roles/"+esc(name), 0, in, &out)
 }
 
+// RenameSpaceRole is POST /spaces/{id}/roles/{name}/rename (SpaceMan 0.1.11 or later): the role and every live reference
+// to it in the space move to newName in one transaction. Without ifMatch the role's revision is not checked.
+func (c *Client) RenameSpaceRole(ctx context.Context, spaceID, name, newName string) (*RenamedSpaceRole, error) {
+	var out RenamedSpaceRole
+	return &out, c.post(ctx, "/spaces/"+esc(spaceID)+"/roles/"+esc(name)+"/rename", 0, RenameSpaceRoleInput{NewName: newName}, &out)
+}
+
+// ListSpaceRoleRenames is GET /spaces/{id}/role-renames (SpaceMan 0.1.11 or later), newest first.
+func (c *Client) ListSpaceRoleRenames(ctx context.Context, spaceID string) ([]*SpaceRoleRename, error) {
+	var out items[*SpaceRoleRename]
+	return out.Items, c.get(ctx, "/spaces/"+esc(spaceID)+"/role-renames", &out)
+}
+
+// FollowSpaceRoleRename returns the name a role now carries after renames from name, or name itself when it was never
+// renamed away. renames are newest first. It starts at the earliest rename away from name made after since (the name may
+// have been reused since: the role the caller last saw is the one renamed first) and follows the later renames forward.
+// A rename made at or before since belongs to an earlier holder of the name (since is the zero time: nothing is known
+// about that role, so nothing is followed).
+func FollowSpaceRoleRename(renames []*SpaceRoleRename, name string, since time.Time) string {
+	start := -1
+	if since.IsZero() {
+		return name
+	}
+	for i := len(renames) - 1; i >= 0; i-- {
+		if renames[i].From == name && renames[i].RenamedAt.After(since) {
+			start = i
+			break
+		}
+	}
+	if start < 0 {
+		return name
+	}
+	cur := renames[start].To
+	for j := start - 1; j >= 0; j-- {
+		if renames[j].From == cur {
+			cur = renames[j].To
+		}
+	}
+	return cur
+}
+
 // DeleteSpaceRole is DELETE /spaces/{id}/roles/{name}.
 func (c *Client) DeleteSpaceRole(ctx context.Context, spaceID, name string) error {
 	return c.del(ctx, "/spaces/"+esc(spaceID)+"/roles/"+esc(name))
@@ -287,6 +329,13 @@ func (c *Client) GetPrompt(ctx context.Context, id string) (*Prompt, error) {
 func (c *Client) CreatePrompt(ctx context.Context, in CreatePromptInput) (*Prompt, error) {
 	var out Prompt
 	return &out, c.do2(ctx, http.MethodPost, "/prompts", 0, in, &out)
+}
+
+// UpdatePrompt is PATCH /prompts/{id} (SpaceMan 0.1.11): changes name and/or description in place, creating no version.
+// version is the prompt's `version` (If-Match).
+func (c *Client) UpdatePrompt(ctx context.Context, id string, version int64, in UpdatePromptInput) (*Prompt, error) {
+	var out Prompt
+	return &out, c.patch(ctx, "/prompts/"+esc(id), version, in, &out)
 }
 
 // SavePromptDraft is PUT /prompts/{id}/draft: version 0 starts a new draft, otherwise it updates the draft at version.
@@ -371,6 +420,20 @@ func (c *Client) GetMCPGrant(ctx context.Context, serverID, grantID string) (*MC
 		}
 	}
 	return nil, notFound("GET /mcp-servers/{server_id}/grants", "grant "+grantID)
+}
+
+// FindMCPGrantByRole finds the grant of a server for a space and role (a not-found error when there is none).
+func (c *Client) FindMCPGrantByRole(ctx context.Context, serverID, spaceID, role string) (*MCPGrant, error) {
+	var out items[*MCPGrant]
+	if err := c.get(ctx, "/mcp-servers/"+esc(serverID)+"/grants", &out); err != nil {
+		return nil, err
+	}
+	for _, g := range out.Items {
+		if g.SpaceID == spaceID && g.Role == role {
+			return g, nil
+		}
+	}
+	return nil, notFound("GET /mcp-servers/{server_id}/grants", "grant of role "+role)
 }
 
 // AddMCPGrant is POST /mcp-servers/{id}/grants.

@@ -66,17 +66,18 @@ func (r *promptResource) Metadata(_ context.Context, req resource.MetadataReques
 func (r *promptResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "A catalog prompt (`/prompts`). `body`, `extends` and `notes` describe the latest published version; changing them " +
-			"publishes the next immutable version (`PUT /prompts/{id}/draft`, `POST /prompts/{id}/publish`). Roles that follow the prompt use it " +
-			"from their next launch. SpaceMan has no API to rename or delete a prompt: identifying fields are fixed and destroying the resource " +
+			"publishes the next immutable version (`PUT /prompts/{id}/draft`, `POST /prompts/{id}/publish`). `name` and `description` change in place " +
+			"(`PATCH /prompts/{id}`, SpaceMan 0.1.11 or later) and publish nothing. Roles that follow the prompt use it " +
+			"from their next launch. SpaceMan has no API to delete a prompt: `slug` and `kind` are fixed and destroying the resource " +
 			"only removes it from Terraform's state.",
 		Attributes: map[string]schema.Attribute{
 			"id":   idAttr("The prompt ID."),
 			"slug": fixedString("Unique identifier. Fixed after creation.", "A prompt's slug"),
-			"name": fixedString("Display name. Fixed after creation (the API has no rename).", "A prompt's name"),
+			"name": schema.StringAttribute{Required: true, MarkdownDescription: "Display name. Changed in place (`PATCH /prompts/{id}`, SpaceMan 0.1.11 or later); creates no version."},
 			"kind": schema.StringAttribute{Required: true, MarkdownDescription: "`role`, `dream`, `kb`, `event` or `general`. Fixed after creation.",
 				Validators:    []validatorString{stringvalidator.OneOf("role", "dream", "kb", "event", "general")},
 				PlanModifiers: []planmodifier.String{fixedAfterCreate("A prompt's kind")}},
-			"description":       fixedOptString("Description. Fixed after creation.", "A prompt's description"),
+			"description":       defaultEmpty("Description. Changed in place (SpaceMan 0.1.11 or later); creates no version."),
 			"body":              schema.StringAttribute{Required: true, MarkdownDescription: "Markdown content of the published version."},
 			"extends":           defaultEmpty("A published version (of another prompt) whose content comes first."),
 			"notes":             defaultEmpty("Notes recorded with the published version."),
@@ -85,6 +86,26 @@ func (r *promptResource) Schema(_ context.Context, _ resource.SchemaRequest, res
 			"sha256":            schema.StringAttribute{Computed: true, MarkdownDescription: "SHA-256 of the latest version's resolved content."},
 		},
 	}
+}
+
+// ModifyPlan keeps the computed version attributes when only `name` or `description` changed: such a change publishes
+// nothing, so `latest_version`, `latest_version_id` and `sha256` stay as they are.
+func (r *promptResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	if req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
+		return
+	}
+	var plan, state promptModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if plan.Body.IsUnknown() || plan.Extends.IsUnknown() || plan.Notes.IsUnknown() ||
+		!plan.Body.Equal(state.Body) || !plan.Extends.Equal(state.Extends) || !plan.Notes.Equal(state.Notes) {
+		return
+	}
+	plan.LatestVersion, plan.LatestVersionID, plan.SHA256 = state.LatestVersion, state.LatestVersionID, state.SHA256
+	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
 }
 
 func (r *promptResource) toModel(p *client.Prompt, m *promptModel) {
@@ -178,14 +199,51 @@ func (r *promptResource) Read(ctx context.Context, req resource.ReadRequest, res
 }
 
 func (r *promptResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var m promptModel
+	var m, old promptModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &m)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &old)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	p := r.publish(ctx, m.ID.ValueString(), &m, &resp.Diagnostics)
-	if p == nil {
-		return
+	id := m.ID.ValueString()
+	if !m.Name.Equal(old.Name) || !m.Description.Equal(old.Description) {
+		cur, err := r.c.GetPrompt(ctx, id)
+		if err != nil {
+			addAPIError(&resp.Diagnostics, "Could not read the prompt", err)
+			return
+		}
+		in := client.UpdatePromptInput{}
+		if cur.Name != m.Name.ValueString() {
+			n := m.Name.ValueString()
+			in.Name = &n
+		}
+		if cur.Description != strOrEmpty(m.Description) {
+			d := strOrEmpty(m.Description)
+			in.Description = &d
+		}
+		if in.Name != nil || in.Description != nil {
+			if _, err := r.c.UpdatePrompt(ctx, id, cur.Version, in); err != nil {
+				if client.IsMissingEndpoint(err) {
+					resp.Diagnostics.AddError("Changing a prompt's name or description needs SpaceMan 0.1.11 or later",
+						"This SpaceMan has no endpoint to change a prompt in place ("+err.Error()+"). Upgrade SpaceMan, or restore `name` and `description`.")
+					return
+				}
+				addAPIError(&resp.Diagnostics, "Could not update the prompt's name or description", err)
+				return
+			}
+		}
+	}
+	var p *client.Prompt
+	if !m.Body.Equal(old.Body) || !m.Extends.Equal(old.Extends) || !m.Notes.Equal(old.Notes) {
+		if p = r.publish(ctx, id, &m, &resp.Diagnostics); p == nil {
+			return
+		}
+	} else {
+		var err error
+		if p, err = r.c.GetPrompt(ctx, id); err != nil {
+			addAPIError(&resp.Diagnostics, "Could not read the prompt", err)
+			return
+		}
 	}
 	r.toModel(p, &m)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &m)...)

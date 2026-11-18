@@ -242,9 +242,11 @@ type SpaceRole struct {
 	Model        string            `json:"model,omitempty"`
 	Settings     map[string]string `json:"settings"`
 	Instructions string            `json:"instructions,omitempty"`
+	Description  string            `json:"description,omitempty"`
 	Skills       []SkillRef        `json:"skills"`
 	Revision     int64             `json:"revision"`
 	Version      int64             `json:"version"`
+	UpdatedAt    time.Time         `json:"updated_at"`
 }
 
 // SpaceRoleInput is PUT /spaces/{id}/roles/{name} (an upsert).
@@ -256,7 +258,29 @@ type SpaceRoleInput struct {
 	Model        string            `json:"model,omitempty"`
 	Settings     map[string]string `json:"settings,omitempty"`
 	Instructions string            `json:"instructions,omitempty"`
+	Description  string            `json:"description,omitempty"`
 	Skills       []SkillRef        `json:"skills,omitempty"`
+}
+
+// RenameSpaceRoleInput is POST /spaces/{id}/roles/{name}/rename.
+type RenameSpaceRoleInput struct {
+	NewName string `json:"new_name"`
+}
+
+// SpaceRoleRename is one rename of a space role; NodeState is pending, failed, done or not_needed.
+type SpaceRoleRename struct {
+	ID        string    `json:"id"`
+	SpaceID   string    `json:"space_id"`
+	From      string    `json:"from"`
+	To        string    `json:"to"`
+	NodeState string    `json:"node_state"`
+	RenamedAt time.Time `json:"renamed_at"`
+}
+
+// RenamedSpaceRole is the renamed role with the rename that renamed it.
+type RenamedSpaceRole struct {
+	SpaceRole
+	Rename SpaceRoleRename `json:"rename"`
 }
 
 // Prompt is a catalog prompt with its versions (draft first, then newest published first).
@@ -290,6 +314,12 @@ type CreatePromptInput struct {
 	Kind        string `json:"kind"`
 	Description string `json:"description,omitempty"`
 	Body        string `json:"body,omitempty"`
+}
+
+// UpdatePromptInput is PATCH /prompts/{id}: a nil field keeps its value.
+type UpdatePromptInput struct {
+	Name        *string `json:"name,omitempty"`
+	Description *string `json:"description,omitempty"`
 }
 
 // PromptDraftInput is PUT /prompts/{id}/draft.

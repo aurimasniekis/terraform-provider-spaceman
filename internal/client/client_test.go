@@ -324,6 +324,26 @@ func TestDraftHelpers(t *testing.T) {
 	}
 }
 
+func TestUpdatePrompt(t *testing.T) {
+	f := &fakeAPI{resp: []func(http.ResponseWriter){jsonResp(200, map[string]any{"id": "prm_1", "name": "New", "version": 4})}}
+	c := newTest(t, f)
+	n := "New"
+	p, err := c.UpdatePrompt(context.Background(), "prm_1", 3, UpdatePromptInput{Name: &n})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := f.reqs[0]
+	if r.method != http.MethodPatch || r.path != "/api/v1/prompts/prm_1" || r.ifMatch != `"3"` && r.ifMatch != "3" {
+		t.Fatalf("request = %+v", r)
+	}
+	if r.body != `{"name":"New"}`+"\n" && r.body != `{"name":"New"}` {
+		t.Fatalf("body = %q (a field left nil must be omitted)", r.body)
+	}
+	if p.Name != "New" || p.Version != 4 {
+		t.Fatalf("prompt = %+v", p)
+	}
+}
+
 func TestUpdateSkill(t *testing.T) {
 	f := &fakeAPI{resp: []func(http.ResponseWriter){jsonResp(200, map[string]any{"id": "skl_1", "name": "New", "version": 4})}}
 	c := newTest(t, f)
@@ -348,6 +368,39 @@ func TestIsMissingEndpoint(t *testing.T) {
 	for status, want := range map[int]bool{404: true, 405: true, 409: false, 500: false} {
 		if got := IsMissingEndpoint(&APIError{Status: status}); got != want {
 			t.Errorf("status %d: %v", status, got)
+		}
+	}
+}
+
+func TestFollowSpaceRoleRename(t *testing.T) {
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	// r builds a rename made n hours after base.
+	r := func(from, to string, n int) *SpaceRoleRename {
+		return &SpaceRoleRename{From: from, To: to, RenamedAt: base.Add(time.Duration(n) * time.Hour)}
+	}
+	seen := base // the role was last seen at base
+	for name, c := range map[string]struct {
+		renames []*SpaceRoleRename // newest first
+		from    string
+		since   time.Time
+		want    string
+	}{
+		"none":   {nil, "a", seen, "a"},
+		"one":    {[]*SpaceRoleRename{r("a", "b", 1)}, "a", seen, "b"},
+		"chain":  {[]*SpaceRoleRename{r("b", "c", 2), r("a", "b", 1)}, "a", seen, "c"},
+		"back":   {[]*SpaceRoleRename{r("b", "a", 2), r("a", "b", 1)}, "a", seen, "a"},
+		"reused": {[]*SpaceRoleRename{r("a", "c", 2), r("a", "b", 1)}, "a", seen, "b"},
+		// a->y, a new a is created, then a->w: the role Terraform saw is the one now called y.
+		"reused after baseline":   {[]*SpaceRoleRename{r("a", "w", 3), r("a", "y", 1)}, "a", seen, "y"},
+		"reused, earliest chains": {[]*SpaceRoleRename{r("y", "z", 4), r("a", "w", 3), r("a", "y", 1)}, "a", seen, "z"},
+		"unrelated":               {[]*SpaceRoleRename{r("x", "y", 1)}, "a", seen, "a"},
+		// A rename from before the role was last seen belongs to an earlier holder of the name.
+		"old rename":    {[]*SpaceRoleRename{r("a", "b", -5)}, "a", seen, "a"},
+		"same instant":  {[]*SpaceRoleRename{r("a", "b", 0)}, "a", seen, "a"},
+		"nothing known": {[]*SpaceRoleRename{r("a", "b", 1)}, "a", time.Time{}, "a"},
+	} {
+		if got := FollowSpaceRoleRename(c.renames, c.from, c.since); got != c.want {
+			t.Errorf("%s: got %s, want %s", name, got, c.want)
 		}
 	}
 }
