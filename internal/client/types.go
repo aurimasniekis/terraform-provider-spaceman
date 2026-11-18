@@ -242,6 +242,7 @@ type SpaceRole struct {
 	Model        string            `json:"model,omitempty"`
 	Settings     map[string]string `json:"settings"`
 	Instructions string            `json:"instructions,omitempty"`
+	Description  string            `json:"description,omitempty"`
 	Skills       []SkillRef        `json:"skills"`
 	Revision     int64             `json:"revision"`
 	Version      int64             `json:"version"`
@@ -257,6 +258,7 @@ type SpaceRoleInput struct {
 	Model        string            `json:"model,omitempty"`
 	Settings     map[string]string `json:"settings,omitempty"`
 	Instructions string            `json:"instructions,omitempty"`
+	Description  string            `json:"description,omitempty"`
 	Skills       []SkillRef        `json:"skills,omitempty"`
 }
 
@@ -312,6 +314,12 @@ type CreatePromptInput struct {
 	Kind        string `json:"kind"`
 	Description string `json:"description,omitempty"`
 	Body        string `json:"body,omitempty"`
+}
+
+// UpdatePromptInput is PATCH /prompts/{id}: a nil field keeps its value.
+type UpdatePromptInput struct {
+	Name        *string `json:"name,omitempty"`
+	Description *string `json:"description,omitempty"`
 }
 
 // PromptDraftInput is PUT /prompts/{id}/draft.

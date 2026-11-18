@@ -210,7 +210,7 @@ func (r *roleTemplateResource) Schema(_ context.Context, _ resource.SchemaReques
 			"kind": schema.StringAttribute{Required: true, MarkdownDescription: "`control`, `worker`, `kb`, `dreamer` or `diagnostic`. Fixed after creation.",
 				Validators:    []validatorString{stringvalidator.OneOf("control", "worker", "kb", "dreamer", "diagnostic")},
 				PlanModifiers: []planmodifier.String{fixedAfterCreate("A role template's kind")}},
-			"description":        optString("Description."),
+			"description":        optString("Description. Changing it creates no prompt version."),
 			"profile_id":         optString("The harness profile."),
 			"prompt_id":          optString("The prompt (prompt binding)."),
 			"prompt_pin":         optString("A published version of `prompt_id`; empty follows the latest version."),

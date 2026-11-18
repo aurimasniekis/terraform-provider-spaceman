@@ -7,7 +7,7 @@ description: |-
 
 # spaceman_prompt (Resource)
 
-A catalog prompt (`/prompts`). `body`, `extends` and `notes` describe the latest published version; changing them publishes the next immutable version (`PUT /prompts/{id}/draft`, `POST /prompts/{id}/publish`). Roles that follow the prompt use it from their next launch. SpaceMan has no API to rename or delete a prompt: identifying fields are fixed and destroying the resource only removes it from Terraform's state.
+A catalog prompt (`/prompts`). `body`, `extends` and `notes` describe the latest published version; changing them publishes the next immutable version (`PUT /prompts/{id}/draft`, `POST /prompts/{id}/publish`). `name` and `description` change in place (`PATCH /prompts/{id}`, SpaceMan 0.1.11 or later) and publish nothing. Roles that follow the prompt use it from their next launch. SpaceMan has no API to delete a prompt: `slug` and `kind` are fixed and destroying the resource only removes it from Terraform's state.
 
 ## Example Usage
 
@@ -31,12 +31,12 @@ resource "spaceman_prompt" "worker" {
 
 - `body` (String) Markdown content of the published version.
 - `kind` (String) `role`, `dream`, `kb`, `event` or `general`. Fixed after creation.
-- `name` (String) Display name. Fixed after creation (the API has no rename).
+- `name` (String) Display name. Changed in place (`PATCH /prompts/{id}`, SpaceMan 0.1.11 or later); creates no version.
 - `slug` (String) Unique identifier. Fixed after creation.
 
 ### Optional
 
-- `description` (String) Description. Fixed after creation.
+- `description` (String) Description. Changed in place (SpaceMan 0.1.11 or later); creates no version.
 - `extends` (String) A published version (of another prompt) whose content comes first.
 - `notes` (String) Notes recorded with the published version.
 

@@ -11,8 +11,10 @@ import (
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/knownvalue"
 	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
+	"github.com/hashicorp/terraform-plugin-testing/tfjsonpath"
 	"github.com/hashicorp/terraform-plugin-testing/tfversion"
 
 	"github.com/aurimasniekis/terraform-provider-spaceman/internal/client"
@@ -416,12 +418,12 @@ func TestAccCatalog(t *testing.T) {
 				resource.TestCheckResourceAttr("spaceman_prompt.p", "body", "Version two."),
 			),
 		},
-		// The API cannot rename a prompt: the change is refused at plan time instead of replacing it.
+		// A prompt's kind is fixed: the change is refused at plan time instead of replacing it.
 		resource.TestStep{
 			Config: strings.Replace(catalogHCL(sfx, slug, acc.nodeA.ID, "Version two.", "claude-opus-4-1"),
-				`name    = "TF prompt"`, `name    = "TF prompt renamed"`, 1),
+				`kind    = "role"`, `kind    = "general"`, 1),
 			PlanOnly:    true,
-			ExpectError: regexp.MustCompile(`A prompt's name cannot be changed`),
+			ExpectError: regexp.MustCompile(`A prompt's kind cannot be changed`),
 		},
 		// A skill added to an existing role without a pin keeps the pin null (it follows the latest version).
 		resource.TestStep{
@@ -940,5 +942,122 @@ resource "spaceman_account" "c" {
 				resource.TestCheckNoResourceAttr("spaceman_account.c", "secret_wo"),
 			),
 		},
+	)
+}
+
+func promptMetaHCL(sfx, spaceSlug, nodeID, name, desc, body, roleDesc, extra string) string {
+	return fmt.Sprintf(`
+resource "spaceman_space" "s" {
+  slug             = %[2]q
+  name             = "Prompt metadata"
+  node_id          = %[3]q
+  purge_on_destroy = true
+}
+
+resource "spaceman_prompt" "p" {
+  slug        = "tf-meta-%[1]s"
+  name        = %[4]q
+  kind        = "role"
+  description = %[5]q
+  body        = %[6]q
+  %[8]s
+}
+
+resource "spaceman_prompt" "base" {
+  slug = "tf-meta-base-%[1]s"
+  name = "Meta base"
+  kind = "general"
+  body = "Be careful."
+}
+
+resource "spaceman_role_template" "t" {
+  slug      = "tf-meta-tpl-%[1]s"
+  name      = "TF meta worker"
+  kind      = "worker"
+  prompt_id = spaceman_prompt.p.id
+}
+
+resource "spaceman_space_role" "r" {
+  space_id    = spaceman_space.s.id
+  name        = "worker"
+  template_id = spaceman_role_template.t.id
+  description = %[7]q
+}
+`, sfx, spaceSlug, nodeID, name, desc, body, roleDesc, extra)
+}
+
+// A prompt's name and description change in place and publish nothing; a body change still publishes.
+func TestAccPromptMetadataInPlace(t *testing.T) {
+	testAccPreCheck(t)
+	sfx, slug := suffix(), "tf-meta-"+suffix()
+	var id string
+	cfg := func(name, desc, body, roleDesc string) string {
+		return promptMetaHCL(sfx, slug, acc.nodeA.ID, name, desc, body, roleDesc, "")
+	}
+	cfgX := func(extra string) string {
+		return promptMetaHCL(sfx, slug, acc.nodeA.ID, "Name three", "Desc two", "Body two.", "", extra)
+	}
+	accSteps(t,
+		resource.TestStep{
+			Config: cfg("Name one", "Desc one", "Body one.", ""),
+			Check: resource.ComposeAggregateTestCheckFunc(
+				resource.TestCheckResourceAttr("spaceman_prompt.p", "latest_version", "1"),
+				resource.TestCheckResourceAttr("spaceman_space_role.r", "description", ""),
+				func(s *terraform.State) error { id = stateAttr(s, "spaceman_prompt.p", "id"); return nil },
+			),
+		},
+		resource.TestStep{
+			Config: cfg("Name two", "Desc two", "Body one.", "Role desc"),
+			ConfigPlanChecks: resource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
+				plancheck.ExpectKnownValue("spaceman_prompt.p", tfjsonpath.New("latest_version"), knownvalue.Int64Exact(1)),
+				plancheck.ExpectKnownValue("spaceman_prompt.p", tfjsonpath.New("sha256"), knownvalue.NotNull()),
+				plancheck.ExpectKnownValue("spaceman_prompt.p", tfjsonpath.New("latest_version_id"), knownvalue.NotNull()),
+			}},
+			Check: resource.ComposeAggregateTestCheckFunc(
+				resource.TestCheckResourceAttr("spaceman_prompt.p", "name", "Name two"),
+				resource.TestCheckResourceAttr("spaceman_prompt.p", "description", "Desc two"),
+				resource.TestCheckResourceAttr("spaceman_prompt.p", "latest_version", "1"),
+				resource.TestCheckResourceAttr("spaceman_space_role.r", "description", "Role desc"),
+				func(s *terraform.State) error {
+					p, err := acc.client.GetPrompt(context.Background(), id)
+					if err != nil {
+						return err
+					}
+					if p.Name != "Name two" || p.Description != "Desc two" {
+						return fmt.Errorf("prompt = %q / %q", p.Name, p.Description)
+					}
+					if len(p.Versions) != 1 {
+						return fmt.Errorf("a metadata-only change created a version: %d versions", len(p.Versions))
+					}
+					return nil
+				},
+			),
+		},
+		resource.TestStep{Config: cfg("Name two", "Desc two", "Body one.", "Role desc"), PlanOnly: true},
+		// Name and body together: one new version.
+		resource.TestStep{
+			Config: cfg("Name three", "Desc two", "Body two.", ""),
+			Check: resource.ComposeAggregateTestCheckFunc(
+				resource.TestCheckResourceAttr("spaceman_prompt.p", "name", "Name three"),
+				resource.TestCheckResourceAttr("spaceman_prompt.p", "latest_version", "2"),
+				resource.TestCheckResourceAttr("spaceman_space_role.r", "description", ""),
+			),
+		},
+		// Only notes: a new version.
+		resource.TestStep{
+			Config: cfgX(`notes = "n1"`),
+			ConfigPlanChecks: resource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
+				plancheck.ExpectUnknownValue("spaceman_prompt.p", tfjsonpath.New("latest_version"))}},
+			Check: resource.TestCheckResourceAttr("spaceman_prompt.p", "latest_version", "3"),
+		},
+		// Only extends: a new version.
+		resource.TestStep{
+			Config: cfgX(`notes = "n1"
+  extends = spaceman_prompt.base.latest_version_id`),
+			ConfigPlanChecks: resource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
+				plancheck.ExpectUnknownValue("spaceman_prompt.p", tfjsonpath.New("latest_version"))}},
+			Check: resource.TestCheckResourceAttr("spaceman_prompt.p", "latest_version", "4"),
+		},
+		resource.TestStep{ResourceName: "spaceman_space_role.r", ImportState: true, ImportStateVerify: true},
 	)
 }
