@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -234,7 +235,7 @@ func (r *humanPolicyResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 	spaceID, typ := strOrEmpty(prior.SpaceID), prior.ActionType.ValueString()
-	v := getVersion(ctx, req.Private, &resp.Diagnostics)
+	v := versionUnlessRoleRefsChange(ctx, req.Private, &resp.Diagnostics, [2]attr.Value{m.SuccessorRole, prior.SuccessorRole})
 	if v == 0 {
 		cur, err := r.c.GetHumanPolicy(ctx, spaceID, typ)
 		if err != nil {
