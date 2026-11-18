@@ -5,6 +5,8 @@ All notable changes to this provider are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.1.11] - 2026-11-18
+
 Needs SpaceMan 0.1.11 or later for the items below (SpaceMan ADR-0095); an older SpaceMan answers the prompt and skill PATCH with a clear error, and `spaceman_space_role.description` against one earlier than 0.1.11 fails with its 422 plus a hint.
 
 ### Changed
@@ -302,7 +304,8 @@ First release candidate (pre-release; not production-ready, see SpaceMan's docs/
 - `spaceman_human_action_policy`: `response_inbox` (`off`, `routed` or `always`), whether a response also becomes an
   inbox item (SpaceMan SM-INBOX-001, ADR-0049). Without the attribute, the provider's writes reset the policy to `off`.
 
-[Unreleased]: https://github.com/aurimasniekis/terraform-provider-spaceman/compare/v0.1.10...HEAD
+[Unreleased]: https://github.com/aurimasniekis/terraform-provider-spaceman/compare/v0.1.11...HEAD
+[0.1.11]: https://github.com/aurimasniekis/terraform-provider-spaceman/compare/v0.1.10...v0.1.11
 [0.1.10]: https://github.com/aurimasniekis/terraform-provider-spaceman/compare/v0.1.8...v0.1.10
 [0.1.8]: https://github.com/aurimasniekis/terraform-provider-spaceman/compare/v0.1.5...v0.1.8
 [0.1.5]: https://github.com/aurimasniekis/terraform-provider-spaceman/compare/v0.1.3...v0.1.5
