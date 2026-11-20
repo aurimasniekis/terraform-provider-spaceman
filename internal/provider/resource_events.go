@@ -2,7 +2,9 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -594,7 +596,7 @@ func (r *subscriptionResource) Create(ctx context.Context, req resource.CreateRe
 	}
 	s, err := r.c.CreateSubscription(ctx, m.SpaceID.ValueString(), in)
 	if err != nil {
-		addAPIError(&resp.Diagnostics, "Could not create the subscription", err)
+		addSubscriptionAPIError(&resp.Diagnostics, "Could not create the subscription", err, in.IngestOwn)
 		return
 	}
 	if !m.Enabled.ValueBool() { // created enabled; disabling is an update
@@ -604,10 +606,6 @@ func (r *subscriptionResource) Create(ctx context.Context, req resource.CreateRe
 			addAPIError(&resp.Diagnostics, "Could not disable the new subscription", err)
 			return
 		}
-	}
-	if m.IngestOwn.ValueBool() && !s.IngestOwn {
-		addIngestOwnUnsupported(&resp.Diagnostics)
-		return
 	}
 	m.TemplateID = types.StringNull()
 	r.toModel(s, &m)
@@ -678,11 +676,7 @@ func (r *subscriptionResource) Update(ctx context.Context, req resource.UpdateRe
 		}
 	}
 	if err != nil {
-		addAPIError(&resp.Diagnostics, "Could not update the subscription", err)
-		return
-	}
-	if m.IngestOwn.ValueBool() && !s.IngestOwn {
-		addIngestOwnUnsupported(&resp.Diagnostics)
+		addSubscriptionAPIError(&resp.Diagnostics, "Could not update the subscription", err, in.IngestOwn != nil)
 		return
 	}
 	m.TemplateID = prior.TemplateID
@@ -691,11 +685,28 @@ func (r *subscriptionResource) Update(ctx context.Context, req resource.UpdateRe
 	resp.Diagnostics.Append(resp.State.Set(ctx, &m)...)
 }
 
-// addIngestOwnUnsupported explains the one way ingest_own = true comes back off: a SpaceMan that predates the field
-// ignores it on create and update.
-func addIngestOwnUnsupported(d *diag.Diagnostics) {
-	d.AddAttributeError(path.Root("ingest_own"), "ingest_own needs a newer SpaceMan",
-		"SpaceMan did not turn ingest_own on: it needs SpaceMan 0.1.16 or later. The subscription exists without it; upgrade SpaceMan or set ingest_own = false.")
+// addSubscriptionAPIError reports a failed create or update. A SpaceMan that predates ingest_own rejects the field
+// (422 "unexpected property"), so when the request sent it the error says which SpaceMan version is needed.
+func addSubscriptionAPIError(d *diag.Diagnostics, summary string, err error, sentIngestOwn bool) {
+	if sentIngestOwn && rejectsIngestOwn(err) {
+		d.AddError(summary, err.Error()+"\n\ningest_own needs SpaceMan 0.1.16 or later: SpaceMan rejected it. Upgrade SpaceMan or set ingest_own = false.")
+		return
+	}
+	addAPIError(d, summary, err)
+}
+
+// rejectsIngestOwn reports whether err is a 422 that names ingest_own as an unexpected property.
+func rejectsIngestOwn(err error) bool {
+	var ae *client.APIError
+	if !errors.As(err, &ae) || ae.Status != http.StatusUnprocessableEntity {
+		return false
+	}
+	for _, f := range ae.Errors {
+		if strings.HasSuffix(f.Field, "ingest_own") && strings.Contains(f.Message, "unexpected property") {
+			return true
+		}
+	}
+	return strings.Contains(ae.Detail, "ingest_own") && strings.Contains(ae.Detail, "unexpected property")
 }
 
 // ingestOwnPatch is what an update sends for ingest_own: only when it is on in the plan or was on in the prior state
