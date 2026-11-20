@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -604,6 +605,10 @@ func (r *subscriptionResource) Create(ctx context.Context, req resource.CreateRe
 			return
 		}
 	}
+	if m.IngestOwn.ValueBool() && !s.IngestOwn {
+		addIngestOwnUnsupported(&resp.Diagnostics)
+		return
+	}
 	m.TemplateID = types.StringNull()
 	r.toModel(s, &m)
 	setVersion(ctx, resp.Private, s.Version, &resp.Diagnostics)
@@ -638,9 +643,7 @@ func (r *subscriptionResource) Update(ctx context.Context, req resource.UpdateRe
 	}
 	in := client.UpdateSubscriptionInput{Name: m.Name.ValueString(), Enabled: m.Enabled.ValueBool(), Follow: strOrEmpty(m.Follow),
 		Vars: stringMap(ctx, m.Vars, &resp.Diagnostics), WhilePaused: strOrEmpty(m.WhilePaused)}
-	if !m.IngestOwn.IsNull() && !m.IngestOwn.IsUnknown() {
-		in.IngestOwn = m.IngestOwn.ValueBoolPointer()
-	}
+	in.IngestOwn = ingestOwnPatch(m.IngestOwn, prior.IngestOwn)
 	if c := strOrEmpty(m.Custom); c != "" {
 		def, err := parseDefinition(c)
 		if err != nil {
@@ -678,10 +681,34 @@ func (r *subscriptionResource) Update(ctx context.Context, req resource.UpdateRe
 		addAPIError(&resp.Diagnostics, "Could not update the subscription", err)
 		return
 	}
+	if m.IngestOwn.ValueBool() && !s.IngestOwn {
+		addIngestOwnUnsupported(&resp.Diagnostics)
+		return
+	}
 	m.TemplateID = prior.TemplateID
 	r.toModel(s, &m)
 	setVersion(ctx, resp.Private, s.Version, &resp.Diagnostics)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &m)...)
+}
+
+// addIngestOwnUnsupported explains the one way ingest_own = true comes back off: a SpaceMan that predates the field
+// ignores it on create and update.
+func addIngestOwnUnsupported(d *diag.Diagnostics) {
+	d.AddAttributeError(path.Root("ingest_own"), "ingest_own needs a newer SpaceMan",
+		"SpaceMan did not turn ingest_own on: it needs SpaceMan 0.1.16 or later. The subscription exists without it; upgrade SpaceMan or set ingest_own = false.")
+}
+
+// ingestOwnPatch is what an update sends for ingest_own: only when it is on in the plan or was on in the prior state
+// (turning it off), so updates keep working on a SpaceMan that predates the field and rejects unknown properties.
+func ingestOwnPatch(plan, prior types.Bool) *bool {
+	if plan.ValueBool() {
+		return plan.ValueBoolPointer()
+	}
+	if prior.ValueBool() {
+		off := false
+		return &off
+	}
+	return nil
 }
 
 // onlyFollowed reports whether cur differs from the refreshed state only by SpaceMan moving a following subscription

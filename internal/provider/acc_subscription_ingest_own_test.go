@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -69,8 +70,11 @@ func TestAccEventSubscriptionIngestOwn(t *testing.T) {
 		},
 		resource.TestStep{Config: hcl(dialog, true), PlanOnly: true},
 		resource.TestStep{Config: hcl(dialog, false), Check: resource.TestCheckResourceAttr("spaceman_event_subscription.own", "ingest_own", "false")},
-		resource.TestStep{Config: hcl("evt.spaceman.inbox.>", true), ExpectError: regexp.MustCompile(`(?s)ingest_own is not allowed`)},
+		resource.TestStep{Config: strings.Replace(hcl("evt.spaceman.inbox.>", true), "  ingest_own", "  start         = { policy = \"new\" }\n  ingest_own", 1), ExpectError: regexp.MustCompile(`(?s)ingest_own is not allowed`)},
 		resource.TestStep{ResourceName: "spaceman_event_subscription.own", ImportState: true, ImportStateVerify: true,
-			ImportStateVerifyIgnore: []string{"template_version_id"}},
+			ImportStateIdFunc: func(s *terraform.State) (string, error) {
+				return stateAttr(s, "spaceman_event_subscription.own", "space_id") + "/" + stateAttr(s, "spaceman_event_subscription.own", "id"), nil
+			},
+			ImportStateVerifyIgnore: []string{"template_version_id", "custom"}},
 	)
 }

@@ -588,8 +588,8 @@ type Cursor struct {
 	Policy     string     `json:"policy"`
 	Time       *time.Time `json:"time,omitempty"`
 	Seq        int64      `json:"seq,omitempty"`
-	Replay     bool       `json:"replay,omitempty"`
-	Generation int64      `json:"generation,omitempty"`
+	Replay     bool       `json:"replay"`
+	Generation int64      `json:"generation"`
 }
 
 // TemplateRef is the template version a subscription uses.
@@ -646,7 +646,7 @@ type UpdateSubscriptionInput struct {
 	Vars              map[string]string   `json:"vars,omitempty"`
 	Start             *Cursor             `json:"start,omitempty"`
 	WhilePaused       string              `json:"while_paused,omitempty"`
-	// IngestOwn nil leaves the opt-in unchanged; the provider always sends it, so removing it from the configuration turns it off.
+	// IngestOwn nil leaves the opt-in unchanged; the provider sends it only when it is on in the plan or was on before, so older servers that reject the field keep working.
 	IngestOwn *bool `json:"ingest_own,omitempty"`
 }
 
