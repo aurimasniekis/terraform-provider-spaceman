@@ -5,6 +5,13 @@ All notable changes to this provider are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- `spaceman_event_subscription.ingest_own` (default `false`): ingest this SpaceMan's own run dialog events
+  (`evt.spaceman.fleet.run.dialog_detected` or `dialog_cleared`) on a subscription. SpaceMan accepts it only when the
+  subscription's subject is exactly one of those two, and ingests only own events for the subscription's space at
+  automation depth 0 (SpaceMan ADR-0104). Needs SpaceMan 0.1.16 or later; the provider has its own client, so nothing
+  else changes.
+
 ## [0.1.11] - 2026-11-18
 
 Needs SpaceMan 0.1.11 or later for the items below (SpaceMan ADR-0095); an older SpaceMan answers the prompt and skill PATCH with a clear error, and `spaceman_space_role.description` against one earlier than 0.1.11 fails with its 422 plus a hint.

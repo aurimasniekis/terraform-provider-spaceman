@@ -610,6 +610,7 @@ type Subscription struct {
 	Follow       string              `json:"follow"`
 	Delivery     string              `json:"delivery"`
 	WhilePaused  string              `json:"while_paused"`
+	IngestOwn    bool                `json:"ingest_own"`
 	Custom       *TemplateDefinition `json:"custom,omitempty"`
 	Vars         map[string]string   `json:"vars"`
 	Subject      string              `json:"subject"`
@@ -632,6 +633,7 @@ type CreateSubscriptionInput struct {
 	Start             *Cursor             `json:"start,omitempty"`
 	Delivery          string              `json:"delivery,omitempty"`
 	WhilePaused       string              `json:"while_paused,omitempty"`
+	IngestOwn         bool                `json:"ingest_own,omitempty"`
 }
 
 // UpdateSubscriptionInput is PUT /spaces/{id}/subscriptions/{sub}.
@@ -644,6 +646,8 @@ type UpdateSubscriptionInput struct {
 	Vars              map[string]string   `json:"vars,omitempty"`
 	Start             *Cursor             `json:"start,omitempty"`
 	WhilePaused       string              `json:"while_paused,omitempty"`
+	// IngestOwn nil leaves the opt-in unchanged; the provider always sends it, so removing it from the configuration turns it off.
+	IngestOwn *bool `json:"ingest_own,omitempty"`
 }
 
 // HumanType is a human-action type with its versions.

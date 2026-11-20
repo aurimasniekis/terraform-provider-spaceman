@@ -397,6 +397,7 @@ type subscriptionModel struct {
 	Start             types.Object `tfsdk:"start"`
 	Delivery          types.String `tfsdk:"delivery"`
 	WhilePaused       types.String `tfsdk:"while_paused"`
+	IngestOwn         types.Bool   `tfsdk:"ingest_own"`
 	TemplateID        types.String `tfsdk:"template_id"`
 	Subject           types.String `tfsdk:"subject"`
 	Durable           types.String `tfsdk:"durable"`
@@ -451,6 +452,12 @@ func (r *subscriptionResource) Schema(_ context.Context, _ resource.SchemaReques
 				MarkdownDescription: "While the space is paused: `defer` (default) keeps ingesting and tells control about new items when the " +
 					"space resumes; `wake` keeps ingesting and tells control at once; `stop` stops the subscription until the space resumes " +
 					"(durable events wait in the stream; core NATS messages published meanwhile are lost)."},
+			"ingest_own": schema.BoolAttribute{Optional: true, Computed: true, Default: booldefault.StaticBool(false),
+				MarkdownDescription: "Ingest events this SpaceMan published itself (its `spaceman-origin`); default `false`, when they are filtered as a loop guard. " +
+					"Allowed only when the subscription's subject is exactly `evt.spaceman.fleet.run.dialog_detected` or `evt.spaceman.fleet.run.dialog_cleared`; " +
+					"any other subject (wildcards, inbox, task and every event ingestion can cause) is refused by SpaceMan when applying. " +
+					"Only own events for the subscription's own space at automation depth 0 are ingested, so what an ingestion caused is never ingested again; " +
+					"`event_depth`, the rate limit and deduplication still apply. Needs SpaceMan 0.1.16 or later."},
 			"template_id": computedString("The template of `template_version_id`."),
 			"subject":     schema.StringAttribute{Computed: true, MarkdownDescription: "The effective Pulse filter."},
 			"durable":     computedString("The durable name the Pulse operator must grant."),
@@ -531,6 +538,7 @@ func (r *subscriptionResource) toModel(s *client.Subscription, m *subscriptionMo
 	if s.WhilePaused == "" { // a central from before paused-space policies
 		m.WhilePaused = types.StringValue("defer")
 	}
+	m.IngestOwn = types.BoolValue(s.IngestOwn)
 	m.Enabled = types.BoolValue(s.Enabled)
 	m.Subject = types.StringValue(s.Subject)
 	m.Durable = types.StringValue(s.Durable)
@@ -571,7 +579,7 @@ func (r *subscriptionResource) Create(ctx context.Context, req resource.CreateRe
 	}
 	in := client.CreateSubscriptionInput{Name: m.Name.ValueString(), ConnectionID: m.ConnectionID.ValueString(), TemplateVersionID: strOrEmpty(m.TemplateVersionID),
 		Follow: strOrEmpty(m.Follow), Vars: stringMap(ctx, m.Vars, &resp.Diagnostics), Start: r.cursor(ctx, m.Start, &resp.Diagnostics),
-		Delivery: strOrEmpty(m.Delivery), WhilePaused: strOrEmpty(m.WhilePaused)}
+		Delivery: strOrEmpty(m.Delivery), WhilePaused: strOrEmpty(m.WhilePaused), IngestOwn: m.IngestOwn.ValueBool()}
 	if c := strOrEmpty(m.Custom); c != "" {
 		def, err := parseDefinition(c)
 		if err != nil {
@@ -630,6 +638,9 @@ func (r *subscriptionResource) Update(ctx context.Context, req resource.UpdateRe
 	}
 	in := client.UpdateSubscriptionInput{Name: m.Name.ValueString(), Enabled: m.Enabled.ValueBool(), Follow: strOrEmpty(m.Follow),
 		Vars: stringMap(ctx, m.Vars, &resp.Diagnostics), WhilePaused: strOrEmpty(m.WhilePaused)}
+	if !m.IngestOwn.IsNull() && !m.IngestOwn.IsUnknown() {
+		in.IngestOwn = m.IngestOwn.ValueBoolPointer()
+	}
 	if c := strOrEmpty(m.Custom); c != "" {
 		def, err := parseDefinition(c)
 		if err != nil {
