@@ -5,6 +5,10 @@ All notable changes to this provider are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.1.12] - 2026-11-21
+
+Needs SpaceMan 0.1.16 or later for `ingest_own` (SpaceMan ADR-0104).
+
 ### Added
 - `spaceman_event_subscription.ingest_own` (default `false`): ingest this SpaceMan's own run dialog events
   (`evt.spaceman.fleet.run.dialog_detected` or `dialog_cleared`) on a subscription. SpaceMan accepts it only when the
@@ -315,7 +319,8 @@ First release candidate (pre-release; not production-ready, see SpaceMan's docs/
 - `spaceman_human_action_policy`: `response_inbox` (`off`, `routed` or `always`), whether a response also becomes an
   inbox item (SpaceMan SM-INBOX-001, ADR-0049). Without the attribute, the provider's writes reset the policy to `off`.
 
-[Unreleased]: https://github.com/aurimasniekis/terraform-provider-spaceman/compare/v0.1.11...HEAD
+[Unreleased]: https://github.com/aurimasniekis/terraform-provider-spaceman/compare/v0.1.12...HEAD
+[0.1.12]: https://github.com/aurimasniekis/terraform-provider-spaceman/compare/v0.1.11...v0.1.12
 [0.1.11]: https://github.com/aurimasniekis/terraform-provider-spaceman/compare/v0.1.10...v0.1.11
 [0.1.10]: https://github.com/aurimasniekis/terraform-provider-spaceman/compare/v0.1.8...v0.1.10
 [0.1.8]: https://github.com/aurimasniekis/terraform-provider-spaceman/compare/v0.1.5...v0.1.8
