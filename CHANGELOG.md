@@ -12,6 +12,10 @@ against an older SpaceMan: `ingest_own_scope` is sent only when it is `fleet` (o
 - `spaceman_event_subscription.ingest_own_scope` (`space` by default, or `fleet`): with `ingest_own`, ingest the run
   dialog events of every space instead of only the subscription's own. SpaceMan refuses `fleet` (403) unless the space
   holds a fleet-scope grant, and filters other spaces' events again after a revocation.
+- `spaceman_space_limits.worktree_retention_days` (0-36500; 0, the default, means never pruned): days after the owning task
+  was done or cancelled before a worktree SpaceMan created may be pruned. Changing it needs `retention:write`. It is not
+  enforced yet, so it has no effect until SpaceMan's worktree pruning lands. A configuration without it keeps working
+  against an older SpaceMan.
 - `spaceman_event_fleet_scope_grant`: the grant itself (`PUT`/`DELETE /event-fleet-scope-grants/{space_id}`). It is
   installation administration, so the provider's token must be operator-level (`system:write`); a grant on an archived
   space (412) and a token that lacks the permission each get a clear diagnostic.
