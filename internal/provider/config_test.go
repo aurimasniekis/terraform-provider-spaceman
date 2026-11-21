@@ -121,7 +121,7 @@ func TestLimitAttributes(t *testing.T) {
 		}
 		seen[l.key] = true
 	}
-	if len(seen) != 31 || seen["max_top_level_tasks"] {
+	if len(seen) != 32 || seen["max_top_level_tasks"] {
 		t.Fatalf("limits = %v", seen)
 	}
 	for k := range limitChecks {
@@ -176,6 +176,26 @@ func TestUsageLimitChecks(t *testing.T) {
 	} {
 		if got := ok(c.key, c.n); got != c.want {
 			t.Errorf("%s = %d: valid %v, want %v", c.key, c.n, got, c.want)
+		}
+	}
+}
+
+// The worktree retention limit takes 0 (never pruned) to 36500 days.
+func TestWorktreeRetentionCheck(t *testing.T) {
+	ok := func(n int64) bool {
+		resp := &validator.Int64Response{}
+		limitChecks["worktree_retention_days"].ValidateInt64(context.Background(), validator.Int64Request{Path: path.Root("worktree_retention_days"), ConfigValue: types.Int64Value(n)}, resp)
+		return !resp.Diagnostics.HasError()
+	}
+	for _, c := range []struct {
+		n    int64
+		want bool
+	}{
+		{0, true}, {1, true}, {36500, true},
+		{-1, false}, {36501, false},
+	} {
+		if got := ok(c.n); got != c.want {
+			t.Errorf("worktree_retention_days = %d: valid %v, want %v", c.n, got, c.want)
 		}
 	}
 }

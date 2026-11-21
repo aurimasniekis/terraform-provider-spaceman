@@ -50,6 +50,7 @@ var spaceLimitAttrs = []limitAttr{
 	{"retention_transcripts_days", "Days central keeps a run's stored native transcript (0-36500; 0: kept). Needs `retention:write`."},
 	{"retention_attachments_days", "Days an attachment is kept once every item using it is finished (0-36500; 0: kept); never deleted while an open item uses it. Needs `retention:write`."},
 	{"retention_human_actions_days", "Days a resolved, cancelled or expired human action is kept (0-36500; 0: kept); kept while open work refers to it. Needs `retention:write`."},
+	{"worktree_retention_days", "Days an idle, finished worktree is kept before it may be pruned (0-36500; 0: never pruned). Changing it needs `retention:write` (space admins); pruning isn't enforced yet."},
 	{"control_autostart", "Start the space's control role when work waits for control and no control run is live, resuming the last control's session (1: on, 0: off; SpaceMan ADR-0056)."},
 	{"control_idle_stop_minutes", "Minutes control may sit idle before SpaceMan stops it; the next waiting work starts it again (0-10080; 0: never)."},
 	{"terminal_cols", "Width new runs' terminals are held at, in columns (40-400; 0: the node's default size, its `runner.terminal_size`). " +
@@ -89,6 +90,7 @@ var limitChecks = map[string]validator.Int64{
 	"usage_limit_switch_max_per_day":     int64validator.Between(0, 50),
 	"usage_limit_wait_if_reset_within":   int64validator.Between(0, 1440),
 	"usage_limit_min_headroom_percent":   int64validator.Between(0, 100),
+	"worktree_retention_days":            int64validator.Between(0, 36500),
 }
 
 // zeroOrBetween accepts 0 or a value within min..max (SpaceMan's terminal size limits: 0 is the node's default).
