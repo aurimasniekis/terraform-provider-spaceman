@@ -50,7 +50,7 @@ var spaceLimitAttrs = []limitAttr{
 	{"retention_transcripts_days", "Days central keeps a run's stored native transcript (0-36500; 0: kept). Needs `retention:write`."},
 	{"retention_attachments_days", "Days an attachment is kept once every item using it is finished (0-36500; 0: kept); never deleted while an open item uses it. Needs `retention:write`."},
 	{"retention_human_actions_days", "Days a resolved, cancelled or expired human action is kept (0-36500; 0: kept); kept while open work refers to it. Needs `retention:write`."},
-	{"worktree_retention_days", "Days an idle, finished worktree is kept before it may be pruned (0-36500; 0: never pruned). Changing it needs `retention:write` (space admins); pruning isn't enforced yet."},
+	{"worktree_retention_days", "Days after its owning task was done or cancelled before a worktree SpaceMan created for it may be pruned (0-36500; 0: never pruned, SpaceMan's default). Worktrees of failed tasks and unowned worktrees are never pruned. Changing it needs `retention:write` (space admins). Not enforced yet: nothing is removed until SpaceMan's worktree pruning lands. Requires SpaceMan 0.1.17 or later."},
 	{"control_autostart", "Start the space's control role when work waits for control and no control run is live, resuming the last control's session (1: on, 0: off; SpaceMan ADR-0056)."},
 	{"control_idle_stop_minutes", "Minutes control may sit idle before SpaceMan stops it; the next waiting work starts it again (0-10080; 0: never)."},
 	{"terminal_cols", "Width new runs' terminals are held at, in columns (40-400; 0: the node's default size, its `runner.terminal_size`). " +
@@ -78,7 +78,7 @@ var spaceLimitAttrs = []limitAttr{
 
 // limitChecks are the limits checked at plan time beyond "at least 0" (SpaceMan checks the other bounds). The terminal
 // size limits take 0 (the node's default) or SpaceMan's terminal size bounds (proto.TerminalMin/Max*); the usage limits
-// take SpaceMan's config.LimitRanges.
+// take SpaceMan's config.LimitRanges; worktree_retention_days takes 0-36500 (0: never pruned).
 var limitChecks = map[string]validator.Int64{
 	"terminal_cols": zeroOrBetween(40, 400),
 	"terminal_rows": zeroOrBetween(10, 200),
