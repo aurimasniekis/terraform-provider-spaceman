@@ -60,7 +60,7 @@ func TestSchemasAreValid(t *testing.T) {
 			}
 		}
 	}
-	if len(names) != 40 {
+	if len(names) != 41 {
 		t.Errorf("resources = %d", len(names))
 	}
 	for _, f := range p.DataSources(ctx) {

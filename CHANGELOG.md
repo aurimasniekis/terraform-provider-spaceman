@@ -5,6 +5,17 @@ All notable changes to this provider are documented here. The format is based on
 
 ## [Unreleased]
 
+Needs SpaceMan 0.1.17 or later for the items below (SpaceMan ADR-0106). Configurations that do not use them keep working
+against an older SpaceMan: `ingest_own_scope` is sent only when it is `fleet` (or when leaving it).
+
+### Added
+- `spaceman_event_subscription.ingest_own_scope` (`space` by default, or `fleet`): with `ingest_own`, ingest the run
+  dialog events of every space instead of only the subscription's own. SpaceMan refuses `fleet` (403) unless the space
+  holds a fleet-scope grant, and filters other spaces' events again after a revocation.
+- `spaceman_event_fleet_scope_grant`: the grant itself (`PUT`/`DELETE /event-fleet-scope-grants/{space_id}`). It is
+  installation administration, so the provider's token must be operator-level (`system:write`); a grant on an archived
+  space (412) and a token that lacks the permission each get a clear diagnostic.
+
 ## [0.1.12] - 2026-11-21
 
 Needs SpaceMan 0.1.16 or later for `ingest_own` (SpaceMan ADR-0104).
