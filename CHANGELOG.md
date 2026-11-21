@@ -5,6 +5,8 @@ All notable changes to this provider are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.1.13] - 2026-11-21
+
 Needs SpaceMan 0.1.17 or later for the items below (SpaceMan ADR-0106). Configurations that do not use them keep working
 against an older SpaceMan: `ingest_own_scope` is sent only when it is `fleet` (or when leaving it).
 
@@ -13,9 +15,13 @@ against an older SpaceMan: `ingest_own_scope` is sent only when it is `fleet` (o
   dialog events of every space instead of only the subscription's own. SpaceMan refuses `fleet` (403) unless the space
   holds a fleet-scope grant, and filters other spaces' events again after a revocation.
 - `spaceman_space_limits.worktree_retention_days` (0-36500; 0, the default, means never pruned): days after the owning task
-  was done or cancelled before a worktree SpaceMan created may be pruned. Changing it needs `retention:write`. It is not
-  enforced yet, so it has no effect until SpaceMan's worktree pruning lands. A configuration without it keeps working
+  was done or cancelled before a worktree SpaceMan created may be pruned. Changing it needs `retention:write`. SpaceMan's daily
+  retention pass prunes the worktrees that are due (SpaceMan 0.1.17, ADR-0107). A configuration without it keeps working
   against an older SpaceMan.
+- `spaceman_space_limits.worktree_cleanup_message_days` (0-365; 0, the default, sends no message, so it is opt-in; 7 sends
+  it weekly): days between the messages that ask the space's control to tidy its repositories. It is sent only when the
+  space has a finished worktree and removes nothing itself. Changing it needs the space's configuration write permission,
+  not `retention:write`. A configuration without it keeps working against an older SpaceMan.
 - `spaceman_event_fleet_scope_grant`: the grant itself (`PUT`/`DELETE /event-fleet-scope-grants/{space_id}`). It is
   installation administration, so the provider's token must be operator-level (`system:write`); a grant on an archived
   space (412) and a token that lacks the permission each get a clear diagnostic.
@@ -334,7 +340,8 @@ First release candidate (pre-release; not production-ready, see SpaceMan's docs/
 - `spaceman_human_action_policy`: `response_inbox` (`off`, `routed` or `always`), whether a response also becomes an
   inbox item (SpaceMan SM-INBOX-001, ADR-0049). Without the attribute, the provider's writes reset the policy to `off`.
 
-[Unreleased]: https://github.com/aurimasniekis/terraform-provider-spaceman/compare/v0.1.12...HEAD
+[Unreleased]: https://github.com/aurimasniekis/terraform-provider-spaceman/compare/v0.1.13...HEAD
+[0.1.13]: https://github.com/aurimasniekis/terraform-provider-spaceman/compare/v0.1.12...v0.1.13
 [0.1.12]: https://github.com/aurimasniekis/terraform-provider-spaceman/compare/v0.1.11...v0.1.12
 [0.1.11]: https://github.com/aurimasniekis/terraform-provider-spaceman/compare/v0.1.10...v0.1.11
 [0.1.10]: https://github.com/aurimasniekis/terraform-provider-spaceman/compare/v0.1.8...v0.1.10
