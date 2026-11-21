@@ -401,6 +401,7 @@ type subscriptionModel struct {
 	Delivery          types.String `tfsdk:"delivery"`
 	WhilePaused       types.String `tfsdk:"while_paused"`
 	IngestOwn         types.Bool   `tfsdk:"ingest_own"`
+	IngestOwnScope    types.String `tfsdk:"ingest_own_scope"`
 	TemplateID        types.String `tfsdk:"template_id"`
 	Subject           types.String `tfsdk:"subject"`
 	Durable           types.String `tfsdk:"durable"`
@@ -461,6 +462,15 @@ func (r *subscriptionResource) Schema(_ context.Context, _ resource.SchemaReques
 					"any other subject (wildcards, inbox, task and every event ingestion can cause) is refused by SpaceMan when applying. " +
 					"Only own events for the subscription's own space at automation depth 0 are ingested, so what an ingestion caused is never ingested again; " +
 					"`event_depth`, the rate limit and deduplication still apply. Needs SpaceMan 0.1.16 or later."},
+			"ingest_own_scope": schema.StringAttribute{Optional: true, Computed: true, Default: stringDefault("space"),
+				Validators: []validatorString{stringvalidator.OneOf("space", "fleet")},
+				MarkdownDescription: "Whose run dialog events `ingest_own` admits: `space` (default) only this space's own; `fleet` every space's. " +
+					"`fleet` needs `ingest_own = true` and a fleet-scope grant for the space (`spaceman_event_fleet_scope_grant`, which only an " +
+					"operator-level token can create); without one SpaceMan refuses it with 403. The grant is checked again for every event, so after a " +
+					"revocation other spaces' events are filtered, and updating the subscription is refused until this is set back to `space`. " +
+					"A fleet-scoped subscription ingests only the identifying fields of the event data (`space_id`, `run_id`, `dialog_id`, `dialog`, " +
+					"`signal`, `detected_at`, `cleared_at`). Sent to SpaceMan only when it is `fleet` (or when leaving `fleet`), so configurations that do not " +
+					"set it keep working against an older SpaceMan. Needs SpaceMan 0.1.17 or later."},
 			"template_id": computedString("The template of `template_version_id`."),
 			"subject":     schema.StringAttribute{Computed: true, MarkdownDescription: "The effective Pulse filter."},
 			"durable":     computedString("The durable name the Pulse operator must grant."),
@@ -542,6 +552,10 @@ func (r *subscriptionResource) toModel(s *client.Subscription, m *subscriptionMo
 		m.WhilePaused = types.StringValue("defer")
 	}
 	m.IngestOwn = types.BoolValue(s.IngestOwn)
+	m.IngestOwnScope = types.StringValue(s.IngestOwnScope)
+	if s.IngestOwnScope == "" { // a central from before fleet scope
+		m.IngestOwnScope = types.StringValue("space")
+	}
 	m.Enabled = types.BoolValue(s.Enabled)
 	m.Subject = types.StringValue(s.Subject)
 	m.Durable = types.StringValue(s.Durable)
@@ -583,6 +597,9 @@ func (r *subscriptionResource) Create(ctx context.Context, req resource.CreateRe
 	in := client.CreateSubscriptionInput{Name: m.Name.ValueString(), ConnectionID: m.ConnectionID.ValueString(), TemplateVersionID: strOrEmpty(m.TemplateVersionID),
 		Follow: strOrEmpty(m.Follow), Vars: stringMap(ctx, m.Vars, &resp.Diagnostics), Start: r.cursor(ctx, m.Start, &resp.Diagnostics),
 		Delivery: strOrEmpty(m.Delivery), WhilePaused: strOrEmpty(m.WhilePaused), IngestOwn: m.IngestOwn.ValueBool()}
+	if m.IngestOwnScope.ValueString() == "fleet" { // the default is left out: a central before 0.1.17 rejects the field
+		in.IngestOwnScope = "fleet"
+	}
 	if c := strOrEmpty(m.Custom); c != "" {
 		def, err := parseDefinition(c)
 		if err != nil {
@@ -596,7 +613,7 @@ func (r *subscriptionResource) Create(ctx context.Context, req resource.CreateRe
 	}
 	s, err := r.c.CreateSubscription(ctx, m.SpaceID.ValueString(), in)
 	if err != nil {
-		addSubscriptionAPIError(&resp.Diagnostics, "Could not create the subscription", err, in.IngestOwn)
+		addSubscriptionAPIError(&resp.Diagnostics, "Could not create the subscription", err, in.IngestOwn, in.IngestOwnScope != "")
 		return
 	}
 	if !m.Enabled.ValueBool() { // created enabled; disabling is an update
@@ -642,6 +659,7 @@ func (r *subscriptionResource) Update(ctx context.Context, req resource.UpdateRe
 	in := client.UpdateSubscriptionInput{Name: m.Name.ValueString(), Enabled: m.Enabled.ValueBool(), Follow: strOrEmpty(m.Follow),
 		Vars: stringMap(ctx, m.Vars, &resp.Diagnostics), WhilePaused: strOrEmpty(m.WhilePaused)}
 	in.IngestOwn = ingestOwnPatch(m.IngestOwn, prior.IngestOwn)
+	in.IngestOwnScope = ingestOwnScopePatch(m.IngestOwnScope, prior.IngestOwnScope)
 	if c := strOrEmpty(m.Custom); c != "" {
 		def, err := parseDefinition(c)
 		if err != nil {
@@ -676,7 +694,7 @@ func (r *subscriptionResource) Update(ctx context.Context, req resource.UpdateRe
 		}
 	}
 	if err != nil {
-		addSubscriptionAPIError(&resp.Diagnostics, "Could not update the subscription", err, in.IngestOwn != nil)
+		addSubscriptionAPIError(&resp.Diagnostics, "Could not update the subscription", err, in.IngestOwn != nil, in.IngestOwnScope != nil)
 		return
 	}
 	m.TemplateID = prior.TemplateID
@@ -687,26 +705,36 @@ func (r *subscriptionResource) Update(ctx context.Context, req resource.UpdateRe
 
 // addSubscriptionAPIError reports a failed create or update. A SpaceMan that predates ingest_own rejects the field
 // (422 "unexpected property"), so when the request sent it the error says which SpaceMan version is needed.
-func addSubscriptionAPIError(d *diag.Diagnostics, summary string, err error, sentIngestOwn bool) {
-	if sentIngestOwn && rejectsIngestOwn(err) {
+func addSubscriptionAPIError(d *diag.Diagnostics, summary string, err error, sentIngestOwn, sentScope bool) {
+	if sentScope && rejectsField(err, "ingest_own_scope") {
+		d.AddError(summary, err.Error()+"\n\ningest_own_scope needs SpaceMan 0.1.17 or later: SpaceMan rejected it. Upgrade SpaceMan or set ingest_own_scope = \"space\".")
+		return
+	}
+	var ae *client.APIError
+	if sentScope && errors.As(err, &ae) && ae.Status == http.StatusForbidden {
+		d.AddError(summary, err.Error()+"\n\ningest_own_scope = \"fleet\" needs a fleet-scope grant for the space, which only an installation administrator "+
+			"gives (spaceman_event_fleet_scope_grant, with an operator-level token), or the token lacks the permission this operation needs.")
+		return
+	}
+	if sentIngestOwn && rejectsField(err, "ingest_own") {
 		d.AddError(summary, err.Error()+"\n\ningest_own needs SpaceMan 0.1.16 or later: SpaceMan rejected it. Upgrade SpaceMan or set ingest_own = false.")
 		return
 	}
 	addAPIError(d, summary, err)
 }
 
-// rejectsIngestOwn reports whether err is a 422 that names ingest_own as an unexpected property.
-func rejectsIngestOwn(err error) bool {
+// rejectsField reports whether err is a 422 that names field as an unexpected property.
+func rejectsField(err error, field string) bool {
 	var ae *client.APIError
 	if !errors.As(err, &ae) || ae.Status != http.StatusUnprocessableEntity {
 		return false
 	}
 	for _, f := range ae.Errors {
-		if strings.HasSuffix(f.Field, "ingest_own") && strings.Contains(f.Message, "unexpected property") {
+		if strings.HasSuffix(f.Field, field) && strings.Contains(f.Message, "unexpected property") {
 			return true
 		}
 	}
-	return strings.Contains(ae.Detail, "ingest_own") && strings.Contains(ae.Detail, "unexpected property")
+	return strings.Contains(ae.Detail, field) && strings.Contains(ae.Detail, "unexpected property")
 }
 
 // ingestOwnPatch is what an update sends for ingest_own: only when it is on in the plan or was on in the prior state
@@ -720,6 +748,36 @@ func ingestOwnPatch(plan, prior types.Bool) *bool {
 		return &off
 	}
 	return nil
+}
+
+// ingestOwnScopePatch is what an update sends for ingest_own_scope: fleet when the plan has it, "space" when the prior state
+// had fleet and the plan leaves it, and nothing otherwise, so a SpaceMan before 0.1.17 never sees the field.
+func ingestOwnScopePatch(plan, prior types.String) *string {
+	if plan.ValueString() == "fleet" {
+		s := "fleet"
+		return &s
+	}
+	if prior.ValueString() == "fleet" {
+		s := "space"
+		return &s
+	}
+	return nil
+}
+
+// ValidateConfig refuses ingest_own_scope = "fleet" without ingest_own = true: SpaceMan returns the scope to space when
+// ingest_own is off, which would show as a permanent difference.
+func (r *subscriptionResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	var scope types.String
+	var ownB types.Bool
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("ingest_own_scope"), &scope)...)
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("ingest_own"), &ownB)...)
+	if resp.Diagnostics.HasError() || scope.IsNull() || scope.IsUnknown() || scope.ValueString() != "fleet" || ownB.IsUnknown() {
+		return
+	}
+	if !ownB.ValueBool() {
+		resp.Diagnostics.AddAttributeError(path.Root("ingest_own_scope"), "ingest_own_scope needs ingest_own",
+			"ingest_own_scope = \"fleet\" only applies when ingest_own = true.")
+	}
 }
 
 // onlyFollowed reports whether cur differs from the refreshed state only by SpaceMan moving a following subscription

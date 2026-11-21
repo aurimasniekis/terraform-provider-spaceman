@@ -602,24 +602,26 @@ type TemplateRef struct {
 
 // Subscription binds a template version or a custom definition to a space.
 type Subscription struct {
-	ID           string              `json:"id"`
-	SpaceID      string              `json:"space_id"`
-	Name         string              `json:"name"`
-	ConnectionID string              `json:"connection_id"`
-	Template     *TemplateRef        `json:"template,omitempty"`
-	Follow       string              `json:"follow"`
-	Delivery     string              `json:"delivery"`
-	WhilePaused  string              `json:"while_paused"`
-	IngestOwn    bool                `json:"ingest_own"`
-	Custom       *TemplateDefinition `json:"custom,omitempty"`
-	Vars         map[string]string   `json:"vars"`
-	Subject      string              `json:"subject"`
-	Durable      string              `json:"durable"`
-	Consumer     string              `json:"consumer"`
-	Grant        string              `json:"grant"`
-	Enabled      bool                `json:"enabled"`
-	Cursor       Cursor              `json:"cursor"`
-	Version      int64               `json:"version"`
+	ID           string       `json:"id"`
+	SpaceID      string       `json:"space_id"`
+	Name         string       `json:"name"`
+	ConnectionID string       `json:"connection_id"`
+	Template     *TemplateRef `json:"template,omitempty"`
+	Follow       string       `json:"follow"`
+	Delivery     string       `json:"delivery"`
+	WhilePaused  string       `json:"while_paused"`
+	IngestOwn    bool         `json:"ingest_own"`
+	// IngestOwnScope is "space" or "fleet" (SpaceMan 0.1.17, ADR-0106); empty from a central that predates it.
+	IngestOwnScope string              `json:"ingest_own_scope,omitempty"`
+	Custom         *TemplateDefinition `json:"custom,omitempty"`
+	Vars           map[string]string   `json:"vars"`
+	Subject        string              `json:"subject"`
+	Durable        string              `json:"durable"`
+	Consumer       string              `json:"consumer"`
+	Grant          string              `json:"grant"`
+	Enabled        bool                `json:"enabled"`
+	Cursor         Cursor              `json:"cursor"`
+	Version        int64               `json:"version"`
 }
 
 // CreateSubscriptionInput is POST /spaces/{id}/subscriptions.
@@ -634,6 +636,8 @@ type CreateSubscriptionInput struct {
 	Delivery          string              `json:"delivery,omitempty"`
 	WhilePaused       string              `json:"while_paused,omitempty"`
 	IngestOwn         bool                `json:"ingest_own,omitempty"`
+	// IngestOwnScope is sent only as "fleet": "space" is the default, and a central before 0.1.17 rejects the field.
+	IngestOwnScope string `json:"ingest_own_scope,omitempty"`
 }
 
 // UpdateSubscriptionInput is PUT /spaces/{id}/subscriptions/{sub}.
@@ -648,6 +652,23 @@ type UpdateSubscriptionInput struct {
 	WhilePaused       string              `json:"while_paused,omitempty"`
 	// IngestOwn nil leaves the opt-in unchanged; the provider sends it only when it is on in the plan or was on before, so older servers that reject the field keep working.
 	IngestOwn *bool `json:"ingest_own,omitempty"`
+	// IngestOwnScope nil leaves the scope unchanged; the provider sends it only when it is fleet in the plan or was fleet before.
+	IngestOwnScope *string `json:"ingest_own_scope,omitempty"`
+}
+
+// FleetScopeGrant is an installation administrator's grant that lets a space's subscriptions use ingest_own_scope fleet
+// (GET /event-fleet-scope-grants/{space_id}, SpaceMan ADR-0106).
+type FleetScopeGrant struct {
+	SpaceID            string `json:"space_id"`
+	Reason             string `json:"reason"`
+	GrantedAt          string `json:"granted_at"`
+	GrantedBy          string `json:"granted_by"`
+	FleetSubscriptions int64  `json:"fleet_subscriptions"`
+}
+
+// FleetScopeInput is the body of PUT /event-fleet-scope-grants/{space_id}.
+type FleetScopeInput struct {
+	Reason string `json:"reason,omitempty"`
 }
 
 // HumanType is a human-action type with its versions.

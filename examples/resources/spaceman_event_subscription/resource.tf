@@ -24,3 +24,17 @@ resource "spaceman_event_subscription" "run_dialogs" {
     body    = "{{data.space_id}}"
   })
 }
+
+# Ingest every space's run dialog events instead (ingest_own_scope = "fleet", needs SpaceMan 0.1.17 or later). SpaceMan
+# refuses it unless an installation administrator gave the space a grant: see spaceman_event_fleet_scope_grant.
+resource "spaceman_event_subscription" "fleet_dialogs" {
+  space_id         = spaceman_space.ops.id
+  name             = "fleet run dialogs"
+  connection_id    = spaceman_event_connection.pulse.id
+  ingest_own       = true
+  ingest_own_scope = "fleet"
+  custom = jsonencode({
+    subject = "evt.spaceman.fleet.run.dialog_detected"
+    title   = "A run in any space is stopped at a dialog"
+  })
+}

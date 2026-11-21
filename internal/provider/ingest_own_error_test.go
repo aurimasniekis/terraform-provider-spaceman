@@ -31,7 +31,7 @@ func TestSubscriptionIngestOwnRejectedHint(t *testing.T) {
 		{"not an API error", errors.New("boom"), true, false},
 	} {
 		var d diag.Diagnostics
-		addSubscriptionAPIError(&d, "Could not create the subscription", c.err, c.sent)
+		addSubscriptionAPIError(&d, "Could not create the subscription", c.err, c.sent, false)
 		errs := d.Errors()
 		if len(errs) != 1 {
 			t.Fatalf("%s: got %d errors, want 1", c.name, len(errs))
