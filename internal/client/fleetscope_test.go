@@ -8,13 +8,13 @@ import (
 	"testing"
 )
 
-// The grant is PUT (idempotent, no If-Match), read with GET and revoked with DELETE; a 412 for an archived space and a
+// The grant is PUT (idempotent, no If-Match), read with GET and revoked with DELETE; a 409 for an archived space and a
 // 404 on revoke are told apart.
 func TestFleetScopeGrant(t *testing.T) {
 	f := &fakeAPI{resp: []func(http.ResponseWriter){
 		jsonResp(200, map[string]any{"space_id": "spc_1", "reason": "ops", "granted_at": "2026-11-21T10:00:00Z", "granted_by": "usr_1", "fleet_subscriptions": 2}),
 		jsonResp(200, map[string]any{"space_id": "spc_1", "granted_at": "2026-11-21T10:00:00Z", "granted_by": "usr_1", "fleet_subscriptions": 0}),
-		problem(412, "precondition_failed", "space is archived"),
+		problem(409, "precondition_failed", "space is archived"),
 		func(w http.ResponseWriter) { w.WriteHeader(http.StatusNoContent) },
 		problem(404, "not_found", "no grant"),
 	}}
@@ -28,7 +28,7 @@ func TestFleetScopeGrant(t *testing.T) {
 		t.Fatalf("get: %v %+v", err, g)
 	}
 	if _, err = c.PutFleetScopeGrant(ctx, "spc_2", FleetScopeInput{}); !IsConflict(err) {
-		t.Fatalf("archived: want 412, got %v", err)
+		t.Fatalf("archived: want 409, got %v", err)
 	}
 	if err = c.DeleteFleetScopeGrant(ctx, "spc_1"); err != nil {
 		t.Fatal(err)

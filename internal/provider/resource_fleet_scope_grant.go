@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -35,7 +36,7 @@ func (r *fleetScopeGrantResource) Metadata(_ context.Context, req resource.Metad
 
 func (r *fleetScopeGrantResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "Lets a space's event subscriptions use `ingest_own_scope = \"fleet\"\": ingest the run dialog events " +
+		MarkdownDescription: "Lets a space's event subscriptions use `ingest_own_scope = \"fleet\"`: ingest the run dialog events " +
 			"(`evt.spaceman.fleet.run.dialog_detected` and `_cleared`, automation depth 0, identifying fields only) of **every** space " +
 			"(`/event-fleet-scope-grants/{space_id}`, SpaceMan ADR-0106). This is installation administration: **the provider's token must be an " +
 			"operator-level token** (`system:write`; API tokens skip step-up), a space's own permissions never suffice, and it is never reachable " +
@@ -57,7 +58,9 @@ func (r *fleetScopeGrantResource) toModel(g *client.FleetScopeGrant, m *fleetSco
 	m.GrantedAt = types.StringValue(g.GrantedAt)
 	m.GrantedBy = types.StringValue(g.GrantedBy)
 	m.FleetSubscriptions = types.Int64Value(g.FleetSubscriptions)
-	if g.Reason != "" || !m.Reason.IsNull() { // an unset reason stays null, not ""
+	// An unset reason stays null, not "". SpaceMan trims the reason, so a configured value that differs from the stored one
+	// only in surrounding whitespace is kept: the state then matches the configuration and does not show a diff.
+	if (g.Reason != "" || !m.Reason.IsNull()) && strings.TrimSpace(strOrEmpty(m.Reason)) != g.Reason {
 		m.Reason = types.StringValue(g.Reason)
 	}
 }
@@ -67,7 +70,10 @@ func addFleetScopeAPIError(d *diag.Diagnostics, summary string, err error) {
 	var ae *client.APIError
 	if errors.As(err, &ae) {
 		switch ae.Status {
-		case http.StatusPreconditionFailed:
+		case http.StatusConflict:
+			if ae.Code != "precondition_failed" {
+				break
+			}
 			d.AddError(summary, err.Error()+"\n\nSpaceMan refused the grant because the space is archived. Grant fleet scope to an active space, or restore the space first.")
 			return
 		case http.StatusForbidden, http.StatusUnauthorized:
@@ -80,7 +86,7 @@ func addFleetScopeAPIError(d *diag.Diagnostics, summary string, err error) {
 }
 
 func (r *fleetScopeGrantResource) put(ctx context.Context, m *fleetScopeGrantModel, diags *diag.Diagnostics, summary string) {
-	g, err := r.c.PutFleetScopeGrant(ctx, m.SpaceID.ValueString(), client.FleetScopeInput{Reason: strOrEmpty(m.Reason)})
+	g, err := r.c.PutFleetScopeGrant(ctx, m.SpaceID.ValueString(), client.FleetScopeInput{Reason: strings.TrimSpace(strOrEmpty(m.Reason))})
 	if err != nil {
 		addFleetScopeAPIError(diags, summary, err)
 		return

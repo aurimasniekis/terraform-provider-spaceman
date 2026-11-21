@@ -57,27 +57,58 @@ func TestSubscriptionScopeErrors(t *testing.T) {
 	}
 }
 
-// A grant on an archived space answers 412: the diagnostic says so, and a refused token is pointed at the operator-level
-// requirement.
+// A grant on an archived space answers 409 precondition_failed: the diagnostic says so, and a refused token is pointed at
+// the operator-level requirement. Another 409 is not mislabelled as an archived space.
 func TestFleetScopeGrantErrors(t *testing.T) {
 	for _, c := range []struct {
+		name   string
 		status int
+		code   string
 		want   string
+		absent string // substring the detail must not contain
 	}{
-		{http.StatusPreconditionFailed, "space is archived"},
-		{http.StatusForbidden, "operator-level token"},
-		{http.StatusUnauthorized, "operator-level token"},
-		{http.StatusInternalServerError, "500"},
+		{"archived", http.StatusConflict, "precondition_failed", "space is archived", ""},
+		{"other conflict", http.StatusConflict, "conflict", "409", "archived"},
+		{"forbidden", http.StatusForbidden, "forbidden", "operator-level token", ""},
+		{"unauthorized", http.StatusUnauthorized, "unauthorized", "operator-level token", ""},
+		{"server error", http.StatusInternalServerError, "internal", "500", "archived"},
 	} {
 		var d diag.Diagnostics
-		addFleetScopeAPIError(&d, "Could not create the fleet-scope grant", &client.APIError{Status: c.status, Operation: "PUT /event-fleet-scope-grants/spc_1"})
-		if errs := d.Errors(); len(errs) != 1 || !strings.Contains(errs[0].Detail(), c.want) {
-			t.Errorf("%d: %v, want detail containing %q", c.status, errs, c.want)
+		addFleetScopeAPIError(&d, "Could not create the fleet-scope grant", &client.APIError{Status: c.status, Code: c.code, Operation: "PUT /event-fleet-scope-grants/spc_1"})
+		errs := d.Errors()
+		if len(errs) != 1 || !strings.Contains(errs[0].Detail(), c.want) || (c.absent != "" && strings.Contains(errs[0].Detail(), c.absent)) {
+			t.Errorf("%s: %v, want detail containing %q and not %q", c.name, errs, c.want, c.absent)
 		}
 	}
 	var d diag.Diagnostics
 	addFleetScopeAPIError(&d, "x", errors.New("boom"))
 	if len(d.Errors()) != 1 {
 		t.Errorf("plain error: %v", d)
+	}
+}
+
+// SpaceMan trims the grant reason. A configured reason that differs from the stored one only in surrounding whitespace
+// stays as configured (no diff, no "inconsistent result"); a real change is taken from the server.
+func TestFleetScopeGrantReasonWhitespace(t *testing.T) {
+	s := types.StringValue
+	for _, c := range []struct {
+		name       string
+		configured types.String
+		stored     string
+		want       types.String
+	}{
+		{"padded matches server", s("  ops  "), "ops", s("  ops  ")},
+		{"padded tabs and newline", s("\tops\n"), "ops", s("\tops\n")},
+		{"exact match", s("ops"), "ops", s("ops")},
+		{"real change from server", s(" ops "), "other", s("other")},
+		{"unset stays null", types.StringNull(), "", types.StringNull()},
+		{"empty stays empty", s(""), "", s("")},
+		{"whitespace only", s("   "), "", s("   ")},
+	} {
+		m := fleetScopeGrantModel{SpaceID: s("spc_1"), Reason: c.configured}
+		(&fleetScopeGrantResource{}).toModel(&client.FleetScopeGrant{SpaceID: "spc_1", Reason: c.stored}, &m)
+		if !m.Reason.Equal(c.want) {
+			t.Errorf("%s: reason %v, want %v", c.name, m.Reason, c.want)
+		}
 	}
 }

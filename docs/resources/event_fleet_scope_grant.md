@@ -2,12 +2,12 @@
 page_title: "spaceman_event_fleet_scope_grant Resource - spaceman"
 subcategory: ""
 description: |-
-  Lets a space's event subscriptions use `ingest_own_scope = "fleet"": ingest the run dialog events (`evt.spaceman.fleet.run.dialog_detected` and `_cleared`, automation depth 0, identifying fields only) of **every** space (`/event-fleet-scope-grants/{space_id}`, SpaceMan ADR-0106).
+  Lets a space's event subscriptions use `ingest_own_scope = "fleet"`: ingest the run dialog events (`evt.spaceman.fleet.run.dialog_detected` and `_cleared`, automation depth 0, identifying fields only) of **every** space (`/event-fleet-scope-grants/{space_id}`, SpaceMan ADR-0106).
 ---
 
 # spaceman_event_fleet_scope_grant (Resource)
 
-Lets a space's event subscriptions use `ingest_own_scope = "fleet"": ingest the run dialog events (`evt.spaceman.fleet.run.dialog_detected` and `_cleared`, automation depth 0, identifying fields only) of **every** space (`/event-fleet-scope-grants/{space_id}`, SpaceMan ADR-0106). This is installation administration: **the provider's token must be an operator-level token** (`system:write`; API tokens skip step-up), a space's own permissions never suffice, and it is never reachable through SpaceMan MCP or Telegram. Destroying the grant revokes it at once: the space's fleet-scoped subscriptions then filter other spaces' events, and updating them is refused until their `ingest_own_scope` is back to `space`. Needs SpaceMan 0.1.17 or later.
+Lets a space's event subscriptions use `ingest_own_scope = "fleet"`: ingest the run dialog events (`evt.spaceman.fleet.run.dialog_detected` and `_cleared`, automation depth 0, identifying fields only) of **every** space (`/event-fleet-scope-grants/{space_id}`, SpaceMan ADR-0106). This is installation administration: **the provider's token must be an operator-level token** (`system:write`; API tokens skip step-up), a space's own permissions never suffice, and it is never reachable through SpaceMan MCP or Telegram. Destroying the grant revokes it at once: the space's fleet-scoped subscriptions then filter other spaces' events, and updating them is refused until their `ingest_own_scope` is back to `space`. Needs SpaceMan 0.1.17 or later.
 
 ## Example Usage
 

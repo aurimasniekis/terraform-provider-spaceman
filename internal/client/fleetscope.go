@@ -13,7 +13,7 @@ func (c *Client) GetFleetScopeGrant(ctx context.Context, spaceID string) (*Fleet
 }
 
 // PutFleetScopeGrant is PUT /event-fleet-scope-grants/{space_id}: idempotent, granting again replaces the reason. It
-// needs system:write (an operator-level token) and is refused with 412 for an archived space.
+// needs system:write (an operator-level token) and is refused with 409 (precondition_failed) for an archived space.
 func (c *Client) PutFleetScopeGrant(ctx context.Context, spaceID string, in FleetScopeInput) (*FleetScopeGrant, error) {
 	var out FleetScopeGrant
 	return &out, c.put(ctx, fleetScopePath(spaceID), 0, in, &out)
