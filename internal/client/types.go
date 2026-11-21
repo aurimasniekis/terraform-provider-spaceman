@@ -588,8 +588,8 @@ type Cursor struct {
 	Policy     string     `json:"policy"`
 	Time       *time.Time `json:"time,omitempty"`
 	Seq        int64      `json:"seq,omitempty"`
-	Replay     bool       `json:"replay,omitempty"`
-	Generation int64      `json:"generation,omitempty"`
+	Replay     bool       `json:"replay"`
+	Generation int64      `json:"generation"`
 }
 
 // TemplateRef is the template version a subscription uses.
@@ -610,6 +610,7 @@ type Subscription struct {
 	Follow       string              `json:"follow"`
 	Delivery     string              `json:"delivery"`
 	WhilePaused  string              `json:"while_paused"`
+	IngestOwn    bool                `json:"ingest_own"`
 	Custom       *TemplateDefinition `json:"custom,omitempty"`
 	Vars         map[string]string   `json:"vars"`
 	Subject      string              `json:"subject"`
@@ -632,6 +633,7 @@ type CreateSubscriptionInput struct {
 	Start             *Cursor             `json:"start,omitempty"`
 	Delivery          string              `json:"delivery,omitempty"`
 	WhilePaused       string              `json:"while_paused,omitempty"`
+	IngestOwn         bool                `json:"ingest_own,omitempty"`
 }
 
 // UpdateSubscriptionInput is PUT /spaces/{id}/subscriptions/{sub}.
@@ -644,6 +646,8 @@ type UpdateSubscriptionInput struct {
 	Vars              map[string]string   `json:"vars,omitempty"`
 	Start             *Cursor             `json:"start,omitempty"`
 	WhilePaused       string              `json:"while_paused,omitempty"`
+	// IngestOwn nil leaves the opt-in unchanged; the provider sends it only when it is on in the plan or was on before, so older servers that reject the field keep working.
+	IngestOwn *bool `json:"ingest_own,omitempty"`
 }
 
 // HumanType is a human-action type with its versions.
