@@ -121,7 +121,7 @@ func TestLimitAttributes(t *testing.T) {
 		}
 		seen[l.key] = true
 	}
-	if len(seen) != 32 || seen["max_top_level_tasks"] {
+	if len(seen) != 33 || seen["max_top_level_tasks"] {
 		t.Fatalf("limits = %v", seen)
 	}
 	for k := range limitChecks {
@@ -196,6 +196,26 @@ func TestWorktreeRetentionCheck(t *testing.T) {
 	} {
 		if got := ok(c.n); got != c.want {
 			t.Errorf("worktree_retention_days = %d: valid %v, want %v", c.n, got, c.want)
+		}
+	}
+}
+
+// The worktree cleanup message limit takes 0 (never sent) to 365 days.
+func TestWorktreeCleanupMessageCheck(t *testing.T) {
+	ok := func(n int64) bool {
+		resp := &validator.Int64Response{}
+		limitChecks["worktree_cleanup_message_days"].ValidateInt64(context.Background(), validator.Int64Request{Path: path.Root("worktree_cleanup_message_days"), ConfigValue: types.Int64Value(n)}, resp)
+		return !resp.Diagnostics.HasError()
+	}
+	for _, c := range []struct {
+		n    int64
+		want bool
+	}{
+		{0, true}, {7, true}, {365, true},
+		{-1, false}, {366, false},
+	} {
+		if got := ok(c.n); got != c.want {
+			t.Errorf("worktree_cleanup_message_days = %d: valid %v, want %v", c.n, got, c.want)
 		}
 	}
 }
